@@ -34,18 +34,22 @@ def load_graph_csv(fname):
 def load_graph_graphml(fname):
     g = nx.read_graphml(fname)
     g = nx.MultiGraph(g)
-    attrs = nx.get_edge_attributes(g, "weight")
+    attrs = nx.get_node_attributes(g, "value")
     for k, v in attrs.items():
         attrs[k] = np.array(json.loads(v))
-    nx.set_edge_attributes(g, attrs, "weight")
+    nx.set_node_attributes(g, attrs, "value")
     return g
 
 def save_graph(g, fname):
+    def serialize_vals(g, val_name):
+        attrs = nx.get_node_attributes(g, val_name)
+        for k, v in attrs.items():
+            attrs[k] = json.dumps(v.tolist())
+        nx.set_node_attributes(g, attrs, val_name)
+
     sg = g.copy()
-    attrs = nx.get_edge_attributes(g, "weight")
-    for k, v in attrs.items():
-        attrs[k] = json.dumps(v.tolist())
-    nx.set_edge_attributes(sg, attrs, "weight")
+    serialize_vals(sg, "value")
+    serialize_vals(sg, "next_value")
 
     sg_cyto = nx.MultiDiGraph(sg)
     nx.write_graphml(sg, fname)
@@ -71,7 +75,7 @@ def initialize_node_values(g, mean, std, size=1):
 def update_cos_dist(g, n, eta_p, eta_n):
     # store tuples of (adjacent node value, edge weight)
     edge_vals = [(g.nodes[v]["value"], w) for _, v, w in g.edges(n, data="weight")] 
-    curr_val = np.copy(g.nodes()[n]["value"])
+    next_val = np.copy(g.nodes()[n]["value"])
     
     # HANDLE GRAD 0 AT LOCAL MAX?
     pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
@@ -86,13 +90,12 @@ def update_cos_dist(g, n, eta_p, eta_n):
     neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
     if(len(pos_edges) > 0):
         pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
-        curr_val -= eta_p * utils.vec_grad(curr_val, pos_avg)     
+        next_val -= eta_p * utils.vec_grad(g.nodes()[n]["value"], pos_avg)     
     if(len(neg_edges) > 0):
         neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
-        curr_val += eta_n * utils.vec_grad(curr_val, neg_avg) 
-    # OK TO NORMALIZE ONCE AT THE END?
-    curr_val = utils.unit_vec(curr_val)
-    return curr_val    
+        next_val += eta_n * utils.vec_grad(g.nodes()[n]["value"], neg_avg) 
+    next_val = utils.unit_vec(next_val)
+    return next_val    
 
 # compute cosine distance loss over graph g
 def loss_cos_dist(g):
@@ -144,7 +147,7 @@ def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_peri
         diagnostic_hist["UPDATE_MAG"].append(update_mag)
         diagnostic_hist["LOSS"].append(loss)
         
-        if(print_period and i % print_period == 0):
+        if(print_period and (i % print_period == 0 or i == iters-1)):
             print("iteration " + str(i) + ": update mag:", update_mag, "loss:", loss)
             
         i += 1

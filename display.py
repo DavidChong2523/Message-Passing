@@ -37,7 +37,7 @@ def plot_diagnostic(diagnostic_hist):
     plt.legend()
     plt.show()
 
-# if target provided, plot cos distance between all nodes and target
+# if target provided, plot angle between all nodes and target
 def plot_history(history, target=None):
     disp_hist = copy.deepcopy(history)
     colors = iter_colors(len(disp_hist.keys()))

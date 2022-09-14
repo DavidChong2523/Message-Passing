@@ -6,22 +6,23 @@ import utils
 
 def run():
     infile = "input/roe_v_wade_network_filtered.csv"
-    g = msg_passing.load_graph_csv(infile)
+    total_g = msg_passing.load_graph_csv(infile)
 
-    #g = utils.largest_connected_component(g)
+    total_g = utils.largest_connected_component(total_g)
+    g = total_g.copy()
     while(True):
         num_removed = utils.remove_auxillary_nodes(g)
         if(num_removed == 0):
             break
     
-    msg_passing.initialize_node_values(g, mean=(-1, 0), std=0.01, size=2)
+    msg_passing.initialize_node_values(g, mean=1, std=0.01, size=3)
     
     history = {}
     people = list(nx.shortest_path(g, "joe biden", "mitch mcconnell")) + ["supreme court", "thomas", "samuel alitos", "roe v wade", "hillary clinton", "kamala harris"]
     for p in people:
         history[p] = []
 
-    history, diagnostic_hist = msg_passing.iterate(g, 10**-1, 10**-1, 10000, print_period=1000, stop_thresh=10**-8, use_heat=True, history=history)
+    history, diagnostic_hist = msg_passing.iterate(g, 10**-3, 10**-3, 10000, print_period=1000, stop_thresh=10**-8, use_heat=True, history=history)
     
     return history, diagnostic_hist, g
 
