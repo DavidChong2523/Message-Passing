@@ -22,7 +22,7 @@ def run():
     for p in people:
         history[p] = []
 
-    history, diagnostic_hist = msg_passing.iterate(g, 10**-3, 10**-3, 10000, print_period=1000, stop_thresh=10**-8, use_heat=True, history=history)
+    history, diagnostic_hist = msg_passing.iterate(g, 10**-3, 10**-3, 1000, print_period=100, stop_thresh=10**-8, use_heat=True, history=history, save_period=100)
     
     return history, diagnostic_hist, g
 

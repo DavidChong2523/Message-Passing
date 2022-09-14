@@ -128,7 +128,7 @@ def propagate_messages(g, eta_p, eta_n, heat=0):
         
     return update_mag, loss    
 
-def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_period=None, history={}):
+def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_period=None, history={}, save_period=1):
     # initialize history
     for k in history.keys():
         history[k].append(g.nodes()[k]["value"])
@@ -141,11 +141,12 @@ def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_peri
             heat = 1 - (i+1)/(iters)
         update_mag, loss = propagate_messages(g, eta_p, eta_n, heat=heat)
         
-        for k in history.keys():
-            history[k].append(g.nodes()[k]["value"])
-        
-        diagnostic_hist["UPDATE_MAG"].append(update_mag)
-        diagnostic_hist["LOSS"].append(loss)
+        if(i % save_period == 0 or i == iters-1):
+            for k in history.keys():
+                history[k].append(g.nodes()[k]["value"])
+            
+            diagnostic_hist["UPDATE_MAG"].append(update_mag)
+            diagnostic_hist["LOSS"].append(loss)
         
         if(print_period and (i % print_period == 0 or i == iters-1)):
             print("iteration " + str(i) + ": update mag:", update_mag, "loss:", loss)
