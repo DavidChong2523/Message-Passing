@@ -54,3 +54,17 @@ def plot_history(history, target=None):
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
     plt.rcParams["figure.figsize"] = (10,5)
     plt.show()
+
+# nodes is a list of strings describing the set of nodes to plot
+def plot_final_values(g, nodes, target=None):
+    colors = iter_colors(len(nodes))
+    for i, n in enumerate(nodes):
+        if(not target):
+            val = utils.vec_to_angle(g.nodes()[n]["value"])
+        else:
+            val = utils.between_angle(g.nodes()[n]["value"], g.nodes()[target]["value"])
+
+        plt.scatter(i, val, label=n, color=colors[i])
+    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    plt.rcParams["figure.figsize"] = (10,5)
+    plt.show()
