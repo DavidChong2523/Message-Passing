@@ -156,4 +156,36 @@ def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_peri
             break
         
     return history, diagnostic_hist
+
+# iteratively remove auxiliary nodes from graph
+# returns pruned graph, list of auxiliary nodes ordered such that m < n if dist(m, core node) < dist(n, core node)
+def prune_graph(g):
+    msg_g = g.copy()
+    aux_nodes = []
+    while(True):
+        removed, num_removed = utils.remove_auxiliary_nodes(msg_g)
+        aux_nodes += removed
+        if(num_removed == 0):
+            break
+    aux_nodes = aux_nodes[::-1]
+    return msg_g, aux_nodes
+
+# populate auxiliary nodes based on core node values
+# aux_nodes is an array of auxiliary nodes ordered such that m < n if dist(m, core node) < dist(n, core node)
+def set_auxiliary_values(g, aux_nodes):
+    for n in aux_nodes:
+        # only one neighbor
+        for neighbor in g.neighbors(n):
+            # reflect neighbor value to opposite side of unit sphere
+            g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
+
+def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}):
+    msg_g, aux_nodes = prune_graph(g)
+    history, diagnostic_hist = iterate(msg_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
+    for n in msg_g.nodes():
+        g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
+    set_auxiliary_values(g, aux_nodes)
+    return history, diagnostic_hist
+
+
             

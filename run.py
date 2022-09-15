@@ -35,6 +35,21 @@ def test():
     history, diagnostic_hist = msg_passing.iterate(g, 10**-1, 10**-1, 100, print_period=10, stop_thresh=10**-8, use_heat=True, history=history)
     return history, diagnostic_hist, g
 
+def test2():
+    infile = "input/roe_v_wade_network_filtered.csv"
+    g = msg_passing.load_graph_csv(infile)
+    g = utils.largest_connected_component(g)
+    msg_passing.initialize_node_values(g, mean=1, std=0.01, size=3)
+    
+    history = {}
+    people = list(nx.shortest_path(g, "joe biden", "mitch mcconnell")) + ["supreme court", "thomas", "samuel alitos", "roe v wade", "hillary clinton", "kamala harris"]
+    for p in people:
+        history[p] = []
+
+    history, diagnostic_hist = msg_passing.pass_messages(g, 10**-3, 10**-3, 1000, print_period=100, stop_thresh=10**-8, use_heat=True, history=history, save_period=100)
+    
+    return history, diagnostic_hist, g
+
 if __name__ == "__main__":
     hist, diagnostic_hist, g = run()
     outfile = "test.graphml"

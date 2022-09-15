@@ -14,10 +14,10 @@ def ego_network(g, n, radius=1):
     return eg
 
 # remove nodes with one neighbor
-def remove_auxillary_nodes(g):
+def remove_auxiliary_nodes(g):
     to_remove = [n for n in g.nodes() if len(list(g.neighbors(n))) <= 1]
     g.remove_nodes_from(to_remove)
-    return len(to_remove)
+    return to_remove, len(to_remove)
 
 def get_ques_val(ques):
     for q, v in constants.QUES_VAL.items():
