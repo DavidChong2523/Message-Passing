@@ -7,28 +7,41 @@ import pickle
 
 import utils
 
-def load_graph_csv(fname):
+def load_graph_csv(fname, with_dates=False):
     g = nx.MultiGraph()
     df = pd.read_csv(fname)
+    if(with_dates):
+        df["publish_date"] = df["publish_date"].fillna("")
+
     for _, row in df.iterrows():
         edge_weight = utils.get_ques_val(row["valence"])
         if(not edge_weight):
             continue
 
-        source, target = row["source"].lower(), row["target"].lower()
-        g.add_edge(source, target,
-                   weight=edge_weight,
-                   valence=row["valence"],
-                   confidence=row["confidence"],
-                   full_text=row["full_text"],
-                   #summary=row["summary"],
-                   #keywords=row["keywords"],
-                   #publish_date=row["publish_date"],
-                   #authors=row["authors"],
-                   #url=row["url"],
-                   #leaf_label=row["leaf_label"],
-                   #root_label=row["root_label"]
-                  )
+        if(not with_dates):
+            source, target = row["source"].lower(), row["target"].lower()
+            g.add_edge(source, target,
+                weight=edge_weight,
+                valence=row["valence"],
+                confidence=row["confidence"],
+                full_text=row["full_text"],
+                #summary=row["summary"],
+                #keywords=row["keywords"],
+                #publish_date=row["publish_date"],
+                #authors=row["authors"],
+                #url=row["url"],
+                #leaf_label=row["leaf_label"],
+                #root_label=row["root_label"]
+            )
+        else:
+            source, target = row["from_node"].lower(), row["to_node"].lower()
+            g.add_edge(source, target,
+                weight=edge_weight,
+                valence=row["valence"],
+                confidence=row["confidence"],
+                #full_text=row["full_text"],
+                publish_date=row["publish_date"]
+            )
     return g
 
 def load_graph_graphml(fname):
@@ -186,6 +199,42 @@ def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_peri
         g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
     set_auxiliary_values(g, aux_nodes)
     return history, diagnostic_hist
+
+
+# input is initialized larget connected component of graph
+# history is a dictionary of {date: {node_name: []}}
+# save_path is a directory/filename_prefix, "{DATE}.graphml" will be added on
+def pass_messages_time_series(dates, g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}, remove_undated_edges=False, save_path=None):
+    g = g.copy()
+    if(remove_undated_edges):
+        to_remove = [(u, v, k) for u, v, k, d in g.edges(keys=True, data=True) if d["publish_date"] == ""]
+        g.remove_edges_from(to_remove)
+        
+    results = []
+    for i, date in enumerate(dates):
+        print(f"Training on dates before {date}, graph {i+1}/{len(dates)}")
+        curr_g = g.copy()
+        to_remove = [(u, v, k) for u, v, k, d in g.edges(keys=True, data=True) if d["publish_date"] > date]
+        curr_hist = history.get(date, {})
+        node_hist, diagnostic_hist = pass_messages(curr_g, eta_p, eta_n, iters, use_heat, stop_thresh=stop_thresh, print_period=print_period, save_period=save_period, history=curr_hist)
+        results.append((curr_g, node_hist, diagnostic_hist))
+
+        if(save_path):
+            full_path = save_path + "_" + date.replace(" ", "_").replace(":", "-")
+            full_path_graph = full_path + ".graphml"
+            full_path_hist = full_path + ".pkl"
+            save_graph(curr_g, full_path_graph)
+            save_history(node_hist, diagnostic_hist, full_path_hist)
+
+    return results
+
+def generate_graph_date_range(g, step):
+    DATE_FORMAT = "YYYY-MM-DD"
+    dates = [d["publish_date"] for _, _, d in g.edges(data=True) if d["publish_date"] != ""]
+    dates = sorted(list(set(dates)))
+    start, end = str(dates[0])[:len(DATE_FORMAT)+1], str(dates[-1])[:len(DATE_FORMAT)+1]
+    return utils.generate_date_range(start, end, step)
+
 
 
             

@@ -50,6 +50,20 @@ def test2():
     
     return history, diagnostic_hist, g
 
+def test3():
+    infile = "input/Streamed_Datasets/gun_regulations_network.csv"
+    g = msg_passing.load_graph_csv(infile, with_dates=True)
+    g = utils.largest_connected_component(g)
+    msg_passing.initialize_node_values(g, mean=1, std=0.01, size=3)
+
+    dates = msg_passing.generate_graph_date_range(g, 90)
+    history = {}
+    iters = 100
+    save_period = iters // 100
+    save_path = "output/gun_regulations_test/test"
+    results = msg_passing.pass_messages_time_series(dates, g, 10**-3, 10**-3, iters, print_period=None, stop_thresh=10**-8, use_heat=True, history=history, save_period=save_period, remove_undated_edges=True, save_path=save_path)
+    return dates, results
+
 if __name__ == "__main__":
     hist, diagnostic_hist, g = run()
     outfile = "test.graphml"

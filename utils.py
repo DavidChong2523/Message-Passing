@@ -1,6 +1,8 @@
 import networkx as nx
 import numpy as np
 import re
+import datetime
+import pandas as pd
 
 import constants
 
@@ -73,3 +75,14 @@ def average_degree(g):
 def average_value(g):
     vals = [g.nodes()[n]["value"] for n in g.nodes()]
     return sum(vals) / len(vals)
+
+def node_degrees(g):
+    return sorted(list(g.degree()), key=lambda x: x[1], reverse=True)
+
+def generate_date_range(start, end, step):
+    start, end = start.strip(), end.strip()
+    start_date = datetime.datetime.strptime(start, "%Y-%m-%d")
+    end_date = datetime.datetime.strptime(end, "%Y-%m-%d")
+    periods = (end_date-start_date).days // step
+    date_range = pd.date_range(start, end, periods=periods)
+    return [str(d) for d in date_range]
