@@ -65,10 +65,10 @@ def test3():
     return dates, results
 
 if __name__ == "__main__":
-    hist, diagnostic_hist, g = run()
-    outfile = "test.graphml"
-    msg_passing.save_graph(g, outfile)
-
+    #hist, diagnostic_hist, g = run()
+    #outfile = "test.graphml"
+    #msg_passing.save_graph(g, outfile)
+    test3()
 
         
 

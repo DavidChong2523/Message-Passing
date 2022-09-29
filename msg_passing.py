@@ -4,6 +4,7 @@ import numpy as np
 import json
 from collections import defaultdict
 import pickle 
+import os 
 
 import utils
 
@@ -215,6 +216,7 @@ def pass_messages_time_series(dates, g, eta_p, eta_n, iters, use_heat, stop_thre
         print(f"Training on dates before {date}, graph {i+1}/{len(dates)}")
         curr_g = g.copy()
         to_remove = [(u, v, k) for u, v, k, d in g.edges(keys=True, data=True) if d["publish_date"] > date]
+        curr_g.remove_edges_from(to_remove)
         curr_hist = history.get(date, {})
         node_hist, diagnostic_hist = pass_messages(curr_g, eta_p, eta_n, iters, use_heat, stop_thresh=stop_thresh, print_period=print_period, save_period=save_period, history=curr_hist)
         results.append((curr_g, node_hist, diagnostic_hist))
@@ -235,6 +237,6 @@ def generate_graph_date_range(g, step):
     start, end = str(dates[0])[:len(DATE_FORMAT)+1], str(dates[-1])[:len(DATE_FORMAT)+1]
     return utils.generate_date_range(start, end, step)
 
-
-
-            
+def load_graph_time_series(dir):
+    for fname in os.listdir(dir):
+        print(fname)

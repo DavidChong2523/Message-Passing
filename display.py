@@ -31,9 +31,15 @@ def iter_colors(num_labels):
 
 def plot_diagnostic(diagnostic_hist):
     plt.plot([i for i in range(len(diagnostic_hist["UPDATE_MAG"]))], diagnostic_hist["UPDATE_MAG"], label="update mag")
+    plt.title("update magnitude")
+    plt.xlabel("iterations")
+    plt.ylabel("update magnitude")
     plt.legend()
     plt.show()
     plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], diagnostic_hist["LOSS"], label="loss")
+    plt.title("loss")
+    plt.ylabel("loss")
+    plt.xlabel("update magnitude")
     plt.legend()
     plt.show()
 
@@ -63,8 +69,12 @@ def plot_final_values(g, nodes, target=None):
             val = utils.vec_to_angle(g.nodes()[n]["value"])
         else:
             val = utils.between_angle(g.nodes()[n]["value"], g.nodes()[target]["value"])
+            #print(n, g.nodes()[n]["value"], g.nodes()[target]["value"], val)
 
         plt.scatter(i, val, label=n, color=colors[i])
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    plt.title("final node values")
+    plt.ylabel("angle with target node")
+    plt.xlabel("nodes")
     plt.rcParams["figure.figsize"] = (10,5)
     plt.show()
