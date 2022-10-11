@@ -8,7 +8,7 @@ import os
 
 import utils
 
-def load_graph_csv(fname, with_dates=False):
+def load_graph_csv(fname, with_dates=False, raw_answer=False):
     g = nx.MultiGraph()
     df = pd.read_csv(fname)
     if(with_dates):
@@ -19,7 +19,25 @@ def load_graph_csv(fname, with_dates=False):
         if(not edge_weight):
             continue
 
-        if(not with_dates):
+        if(with_dates):
+            source, target = row["from_node"].lower(), row["to_node"].lower()
+            g.add_edge(source, target,
+                weight=edge_weight,
+                valence=row["valence"],
+                confidence=row["confidence"],
+                #full_text=row["full_text"],
+                publish_date=row["publish_date"]
+            )
+        elif(raw_answer):
+            source, target = row["from_node"].lower(), row["raw_answer"].lower()
+            g.add_edge(source, target,
+                weight=edge_weight,
+                valence=row["valence"],
+                confidence=row["confidence"],
+                #full_text=row["full_text"],
+                publish_date=row["publish_date"]
+            )
+        else:
             source, target = row["source"].lower(), row["target"].lower()
             g.add_edge(source, target,
                 weight=edge_weight,
@@ -34,15 +52,7 @@ def load_graph_csv(fname, with_dates=False):
                 #leaf_label=row["leaf_label"],
                 #root_label=row["root_label"]
             )
-        else:
-            source, target = row["from_node"].lower(), row["to_node"].lower()
-            g.add_edge(source, target,
-                weight=edge_weight,
-                valence=row["valence"],
-                confidence=row["confidence"],
-                #full_text=row["full_text"],
-                publish_date=row["publish_date"]
-            )
+
     return g
 
 def load_graph_graphml(fname):

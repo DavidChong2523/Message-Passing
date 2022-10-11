@@ -36,10 +36,10 @@ def plot_diagnostic(diagnostic_hist):
     plt.ylabel("update magnitude")
     plt.legend()
     plt.show()
-    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], diagnostic_hist["LOSS"], label="loss")
+    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], np.array(diagnostic_hist["LOSS"])/781, label="loss")
     plt.title("loss")
     plt.ylabel("loss")
-    plt.xlabel("update magnitude")
+    plt.xlabel("iterations")
     plt.legend()
     plt.show()
 
@@ -58,6 +58,9 @@ def plot_history(history, target=None):
     for i, k in enumerate(disp_hist.keys()):
         plt.plot([i for i in range(len(disp_hist[k]))], disp_hist[k], label=k, color=colors[i])
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
+    plt.xlabel("iterations")
+    plt.ylabel("angle with target node")
+    plt.title("node values")
     plt.rcParams["figure.figsize"] = (10,5)
     plt.show()
 

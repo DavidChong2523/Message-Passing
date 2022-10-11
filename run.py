@@ -64,6 +64,46 @@ def test3():
     results = msg_passing.pass_messages_time_series(dates, g, 10**-3, 10**-3, iters, print_period=None, stop_thresh=10**-8, use_heat=True, history=history, save_period=save_period, remove_undated_edges=True, save_path=save_path)
     return dates, results
 
+def test4():
+    infile = "input/Streamed_Datasets_v2/gun_regulations_network.csv"
+    g = msg_passing.load_graph_csv(infile, raw_answer=True)
+    g = utils.largest_connected_component(g)
+    msg_passing.initialize_node_values(g, mean=1, std=0.01, size=3)
+    
+    history = {}
+    people = [
+    "nra",
+    "the second amendment",
+    "democrats",
+    "the national rifle association",
+    "uvalde",
+    "texas", 
+    "republicans",
+    "biden",
+    "donald trump",
+    "california",
+    "houston",
+    "ucla",
+    "the supreme court",
+    "gavin newsom",
+    #"assault weapons",
+    "marco rubio",
+    "childersberg",
+    "michael jennings",
+    "parkland",
+    "florida",
+    "new york",
+    "congress",
+    "background checks",
+    #"cnn",
+    ] 
+    for p in people:
+        history[p] = []
+
+    history, diagnostic_hist = msg_passing.pass_messages(g, 10**-3, 10**-3, 25000, print_period=100, stop_thresh=10**-8, use_heat=True, history=history, save_period=100)
+    
+    return history, diagnostic_hist, g
+
 if __name__ == "__main__":
     #hist, diagnostic_hist, g = run()
     #outfile = "test.graphml"
