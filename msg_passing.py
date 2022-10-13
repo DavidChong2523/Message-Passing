@@ -216,12 +216,11 @@ def set_auxiliary_values(g, aux_nodes):
             g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
 
 def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}):
-    #msg_g, aux_nodes = prune_graph(g)
-    msg_g = g
+    msg_g, aux_nodes = prune_graph(g)
     history, diagnostic_hist = iterate(msg_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
     for n in msg_g.nodes():
         g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
-    #set_auxiliary_values(g, aux_nodes)
+    set_auxiliary_values(g, aux_nodes)
     return history, diagnostic_hist
 
 
