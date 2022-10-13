@@ -11,6 +11,8 @@ import utils
 def load_graph_csv(fname, with_dates=False, raw_answer=False, minimal_answer=False):
     g = nx.MultiGraph()
     df = pd.read_csv(fname)
+    # TRIAL:
+    process_node_names(df)
     if(with_dates):
         df["publish_date"] = df["publish_date"].fillna("")
 
@@ -100,11 +102,64 @@ def load_history(save_file):
         save_obj = pickle.load(f)
     return save_obj["hist"], save_obj["diagnostic_hist"]
 
+def process_node_names(df):
+    # remove leading 'the'
+    def remove_prefix_the(span):
+        span = span.strip().lower()
+        words = span.split(" ")
+        while(True):
+            if(words[0] == "the"):
+                words = words[1:]
+            else:
+                break
+        return " ".join(words)
+
+    # remove ending possessives: 's's's's or s'
+    def remove_possessive(span):
+        span = span.strip().lower()
+        words = span.split(" ")
+        while(True):
+            #print("WORDS:", words)
+            # change to just remove unicode instead of or statement?
+            if(words[-1] == "'s" or words[-1] == "’s" or words[-1] == "'" or words[-1] == ""):
+                words = words[:-1]
+            elif(words[-1][-2:] == "'s" or words[-1][-2:] == "’s"):
+                words[-1] = words[-1][:-2]
+            elif(words[-1][-1] == "'"):
+                words[-1] = words[-1][:-1]
+            else:
+                break
+        return " ".join(words)
+
+    def process(span):
+        try:
+            span = remove_prefix_the(span)
+            span = remove_possessive(span)
+            return span
+        except Exception as e:
+            print("ERROR:", e)
+            print(span.strip().split(" "))
+            return ""
+
+    #diffs = defaultdict(set)
+    for i, row in df.iterrows():
+        source, target = row["from_node"], row["raw_answer"]
+        processed_source, processed_target = process(source), process(target)
+        df.loc[i, ["from_node"]] = [processed_source]
+        df.loc[i, ["raw_answer"]] = [processed_target]
+
+        #if(processed_source != source):
+        #    diffs[processed_source].add(source)
+        #if(processed_target != target):
+        #    diffs[processed_target].add(target)
+    #return diffs
+
+
 # initialize node values as unit vector
 def initialize_node_values(g, mean, std, size=1):
     for n in g.nodes():
-        #vec = np.random.normal(loc=mean, scale=std, size=size)
-        vec = np.random.uniform()
+        vec = np.random.normal(loc=mean, scale=std, size=size)
+        #vec = np.random.uniform()
         g.nodes()[n]["value"] = utils.unit_vec(vec)
 
 # update node n with the gradient of the cos distance loss
