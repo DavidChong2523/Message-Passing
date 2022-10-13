@@ -156,10 +156,12 @@ def process_node_names(df):
 
 
 # initialize node values as unit vector
-def initialize_node_values(g, mean, std, size=1):
+def initialize_node_values(g, mean, std, size=1, square=False):
     for n in g.nodes():
-        vec = np.random.normal(loc=mean, scale=std, size=size)
-        #vec = np.random.uniform()
+        if(not square):
+            vec = np.random.normal(loc=mean, scale=std, size=size)
+        else:
+            vec = np.random.uniform(low=-1.0, high=1.0, size=size)
         g.nodes()[n]["value"] = utils.unit_vec(vec)
 
 # update node n with the gradient of the cos distance loss
