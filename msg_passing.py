@@ -8,7 +8,7 @@ import os
 
 import utils
 
-def load_graph_csv(fname, with_dates=False, raw_answer=False):
+def load_graph_csv(fname, with_dates=False, raw_answer=False, minimal_answer=False):
     g = nx.MultiGraph()
     df = pd.read_csv(fname)
     if(with_dates):
@@ -30,6 +30,17 @@ def load_graph_csv(fname, with_dates=False, raw_answer=False):
             )
         elif(raw_answer):
             source, target = row["from_node"].lower(), row["raw_answer"].lower()
+            g.add_edge(source, target,
+                weight=edge_weight,
+                valence=row["valence"],
+                confidence=row["confidence"],
+                #full_text=row["full_text"],
+                publish_date=row["publish_date"]
+            )
+        elif(minimal_answer):
+            source, target, raw_target = row["from_node"].lower(), row["to_node"].lower(), row["raw_answer"].lower()
+            if(target != raw_target):
+                continue
             g.add_edge(source, target,
                 weight=edge_weight,
                 valence=row["valence"],
@@ -92,7 +103,8 @@ def load_history(save_file):
 # initialize node values as unit vector
 def initialize_node_values(g, mean, std, size=1):
     for n in g.nodes():
-        vec = np.random.normal(loc=mean, scale=std, size=size)
+        #vec = np.random.normal(loc=mean, scale=std, size=size)
+        vec = np.random.uniform()
         g.nodes()[n]["value"] = utils.unit_vec(vec)
 
 # update node n with the gradient of the cos distance loss
@@ -165,7 +177,7 @@ def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_peri
             heat = 1 - (i+1)/(iters)
         update_mag, loss = propagate_messages(g, eta_p, eta_n, heat=heat)
         
-        if(i % save_period == 0 or i == iters-1):
+        if(save_period and (i % save_period == 0 or i == iters-1)):
             for k in history.keys():
                 history[k].append(g.nodes()[k]["value"])
             
@@ -204,11 +216,12 @@ def set_auxiliary_values(g, aux_nodes):
             g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
 
 def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}):
-    msg_g, aux_nodes = prune_graph(g)
+    #msg_g, aux_nodes = prune_graph(g)
+    msg_g = g
     history, diagnostic_hist = iterate(msg_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
     for n in msg_g.nodes():
         g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
-    set_auxiliary_values(g, aux_nodes)
+    #set_auxiliary_values(g, aux_nodes)
     return history, diagnostic_hist
 
 

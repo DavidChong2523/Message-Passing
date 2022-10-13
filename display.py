@@ -36,7 +36,7 @@ def plot_diagnostic(diagnostic_hist):
     plt.ylabel("update magnitude")
     plt.legend()
     plt.show()
-    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], np.array(diagnostic_hist["LOSS"])/781, label="loss")
+    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], np.array(diagnostic_hist["LOSS"])/589, label="loss")
     plt.title("loss")
     plt.ylabel("loss")
     plt.xlabel("iterations")
