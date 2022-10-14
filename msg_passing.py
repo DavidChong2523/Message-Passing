@@ -8,11 +8,11 @@ import os
 
 import utils
 
-def load_graph_csv(fname, with_dates=False, raw_answer=False, minimal_answer=False):
+def load_graph_csv(fname, process_names=True, with_dates=False, raw_answer=False, minimal_answer=False):
     g = nx.MultiGraph()
     df = pd.read_csv(fname)
-    # TRIAL:
-    process_node_names(df)
+    if(process_names):
+        process_node_names(df)
     if(with_dates):
         df["publish_date"] = df["publish_date"].fillna("")
 
@@ -268,9 +268,12 @@ def prune_graph(g):
 def set_auxiliary_values(g, aux_nodes):
     for n in aux_nodes:
         # only one neighbor
-        for neighbor in g.neighbors(n):
-            # reflect neighbor value to opposite side of unit sphere
-            g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
+        for n, neighbor, w in g.edges(n, data="weight"):
+            if(w > 0):
+                g.nodes()[neighbor]["value"] = g.nodes()[n]["value"]
+            elif(w < 0):
+                # reflect neighbor value to opposite side of unit sphere
+                g.nodes()[neighbor]["value"] = -1*g.nodes()[n]["value"]
 
 def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}):
     msg_g, aux_nodes = prune_graph(g)
@@ -319,3 +322,84 @@ def generate_graph_date_range(g, step):
 def load_graph_time_series(dir):
     for fname in os.listdir(dir):
         print(fname)
+
+
+def propagate_messages_2(g, nodes, eta_p, eta_n, heat=0):
+    for n in nodes:
+        # simulated annealing
+        if(np.random.random() < heat):
+            direction = np.random.random(size=g.nodes()[n]["value"].shape) - 0.5
+            direction = utils.unit_vec(direction)
+            next_val = g.nodes()[n]["value"] + (eta_p+eta_n)/2 * direction
+            next_val = utils.unit_vec(next_val)
+        else:
+            next_val = update_cos_dist(g, n, eta_p, eta_n) 
+    
+        g.nodes()[n]["next_value"] = next_val
+        
+    # diagnostic info for change in node values
+    update_mag = sum([np.linalg.norm(g.nodes()[n]["next_value"] - g.nodes()[n]["value"]) for n in nodes])
+    loss = loss_cos_dist(g) 
+    
+    # update node values
+    for n in nodes:
+        g.nodes()[n]["value"] = g.nodes()[n]["next_value"]
+        
+    return update_mag, loss   
+
+
+# compute optimal value of node n with respect to its neighbors
+def compute_optimal_value(g, n):
+    # store tuples of (adjacent node value, edge weight)
+    edge_vals = [(g.nodes[v]["value"], w) for _, v, w in g.edges(n, data="weight")] 
+
+    pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
+    for v, e in edge_vals:
+        if(e > 0):
+            pos_nodes.append(v)
+            pos_edges.append(e)
+        elif(e < 0):
+            neg_nodes.append(v)
+            neg_edges.append(e)
+    pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
+    neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
+    pos_avg = np.zeros(g.nodes()[n]["value"].shape)
+    neg_avg = np.zeros(g.nodes()[n]["value"].shape)
+    if(len(pos_edges) > 0):
+        pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)   
+    if(len(neg_edges) > 0):
+        neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
+    
+    # add noise
+    opt_val = pos_avg - neg_avg
+    direction = np.random.random(size=g.nodes()[n]["value"].shape) - 0.5
+    direction = utils.unit_vec(direction)
+    opt_val = opt_val + 10**-2 * direction
+    opt_val = utils.unit_vec(opt_val)
+    return opt_val   
+
+
+def trial(g, size):
+    total_nodes = len(g.nodes())
+    for n in g.nodes():
+        g.nodes()[n]["value"] = np.zeros(size)
+
+    curr_nodes = set([nd[0] for nd in utils.node_degrees(g)[0:10]])
+    for n in curr_nodes:
+        g.nodes()[n]["value"] = utils.unit_vec(np.random.uniform(low=-1.0, high=1.0, size=size))
+
+    curr_boundary = curr_nodes
+    while(len(curr_nodes) < total_nodes):
+        # add edges out of current boundary
+        neighbors = []
+        for boundary_node in curr_boundary:
+            neighbors += list(g.neighbors(boundary_node))
+        curr_boundary = set(neighbors)
+        curr_nodes.update(curr_boundary)
+        for n in curr_boundary:
+            g.nodes()[n]["value"] = compute_optimal_value(g, n)
+
+        
+
+
+    
