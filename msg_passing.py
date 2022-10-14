@@ -379,7 +379,7 @@ def compute_optimal_value(g, n):
     return opt_val   
 
 
-def trial(g, size):
+def initialize_with_reference_nodes(g, size):
     total_nodes = len(g.nodes())
     for n in g.nodes():
         g.nodes()[n]["value"] = np.zeros(size)
