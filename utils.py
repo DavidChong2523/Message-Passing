@@ -15,6 +15,14 @@ def ego_network(g, n, radius=1):
     eg = nx.ego_graph(g, n, radius=radius)
     return eg
 
+"""
+https://stackoverflow.com/questions/33976911/generate-a-random-sample-of-points-distributed-on-the-surface-of-a-unit-sphere
+"""
+def sample_spherical(npoints, ndim=3):
+    vec = np.random.randn(ndim, npoints)
+    vec /= np.linalg.norm(vec, axis=0)
+    return vec
+
 # remove nodes with one neighbor
 def remove_auxiliary_nodes(g):
     to_remove = [n for n in g.nodes() if len(list(g.neighbors(n))) <= 1]
