@@ -5,6 +5,7 @@ import json
 from collections import defaultdict
 import pickle 
 import os 
+import random
 
 import utils
 
@@ -323,31 +324,6 @@ def load_graph_time_series(dir):
     for fname in os.listdir(dir):
         print(fname)
 
-
-def propagate_messages_2(g, nodes, eta_p, eta_n, heat=0):
-    for n in nodes:
-        # simulated annealing
-        if(np.random.random() < heat):
-            direction = np.random.random(size=g.nodes()[n]["value"].shape) - 0.5
-            direction = utils.unit_vec(direction)
-            next_val = g.nodes()[n]["value"] + (eta_p+eta_n)/2 * direction
-            next_val = utils.unit_vec(next_val)
-        else:
-            next_val = update_cos_dist(g, n, eta_p, eta_n) 
-    
-        g.nodes()[n]["next_value"] = next_val
-        
-    # diagnostic info for change in node values
-    update_mag = sum([np.linalg.norm(g.nodes()[n]["next_value"] - g.nodes()[n]["value"]) for n in nodes])
-    loss = loss_cos_dist(g) 
-    
-    # update node values
-    for n in nodes:
-        g.nodes()[n]["value"] = g.nodes()[n]["next_value"]
-        
-    return update_mag, loss   
-
-
 # compute optimal value of node n with respect to its neighbors
 def compute_optimal_value(g, n):
     # store tuples of (adjacent node value, edge weight)
@@ -399,6 +375,20 @@ def initialize_with_reference_nodes(g, size):
         for n in curr_boundary:
             g.nodes()[n]["value"] = compute_optimal_value(g, n)
 
+
+def trial(g, eta_p, eta_n):
+    
+    n1 = "nra"
+    n2 = "biden"
+    sp = nx.shortest_path(g, n1, n2)
+    print(sp)
+    for i in range(len(sp)):
+        if(i < len(sp)):
+            print(sp[i], sp[i+1], g[sp[i]][sp[i+1]])
+    #print("rand")
+    #nodes = random.sample(g.nodes(), 2)
+    #print(nodes)
+    #print()
         
 
 
