@@ -157,6 +157,7 @@ def process_node_names(df):
 def initialize_node_values(g, size=1):
     for n in g.nodes():
         vec = utils.sample_spherical(1, ndim=size)
+        vec = vec.reshape((size,))
         g.nodes()[n]["value"] = utils.unit_vec(vec)
 
 # update node n with the gradient of the cos distance loss

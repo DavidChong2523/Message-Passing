@@ -18,6 +18,7 @@ def ego_network(g, n, radius=1):
 """
 https://stackoverflow.com/questions/33976911/generate-a-random-sample-of-points-distributed-on-the-surface-of-a-unit-sphere
 """
+# returns shape (ndim, npoints)
 def sample_spherical(npoints, ndim=3):
     vec = np.random.randn(ndim, npoints)
     vec /= np.linalg.norm(vec, axis=0)
