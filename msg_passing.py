@@ -6,6 +6,7 @@ from collections import defaultdict
 import pickle 
 import os 
 import random
+import itertools
 
 import utils
 
@@ -275,12 +276,15 @@ def set_auxiliary_values(g, aux_nodes):
                 # reflect neighbor value to opposite side of unit sphere
                 g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
 
-def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}):
-    msg_g, aux_nodes = prune_graph(g)
+def pass_messages(g, eta_p, eta_n, iters, use_heat, pruning=True, stop_thresh=None, print_period=None, save_period=None, history={}):
+    msg_g, aux_nodes = g, []
+    if(pruning):
+        msg_g, aux_nodes = prune_graph(g)
     history, diagnostic_hist = iterate(msg_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
     for n in msg_g.nodes():
         g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
-    set_auxiliary_values(g, aux_nodes)
+    if(pruning):
+        set_auxiliary_values(g, aux_nodes)
     return history, diagnostic_hist
 
 
@@ -374,20 +378,53 @@ def initialize_with_reference_nodes(g, size):
         for n in curr_boundary:
             g.nodes()[n]["value"] = compute_optimal_value(g, n)
 
+def avg_edge_weights(g):
+    avg_g = nx.create_empty_copy(g)
+    for u, v in g.edges():
+        edge_weights = np.array([e["weight"] for e in g[u][v].values()])
+        avg_weight = np.average(edge_weights)
+        avg_g.add_edge(u, v, weight=avg_weight)
+                
+    return avg_g
 
-def trial(g, eta_p, eta_n):
-    
-    n1 = "nra"
-    n2 = "biden"
-    sp = nx.shortest_path(g, n1, n2)
-    print(sp)
-    for i in range(len(sp)):
-        if(i < len(sp)):
-            print(sp[i], sp[i+1], g[sp[i]][sp[i+1]])
-    #print("rand")
-    #nodes = random.sample(g.nodes(), 2)
-    #print(nodes)
-    #print()
+def trial(g, iters, eta, discount=1, path_length=10, print_period=None, save_period=None, hist={}):
+    path_g = g.copy()
+    for u, v, k in g.edges(keys=True):
+        path_g[u][v][k]["weight"] = 1.0
+
+    avg_g = avg_edge_weights(g)
+    for n in avg_g.nodes():
+        avg_g.nodes()[n]["next_value"] = avg_g.nodes()[n]["value"]
+
+    d_hist = defaultdict(list)
+    paths = nx.generate_random_paths(path_g, iters, path_length=path_length)
+    for iter, path in enumerate(paths):
+        path = list(path)
+        issue_vec = avg_g.nodes()[path[0]]["value"]
+        issue_weight = 1
+        for i, p in enumerate(path[1:]):
+            issue_weight *= discount*g[p][path[i]][0]["weight"]
+            avg_g.nodes()[p]["next_value"] = avg_g.nodes()[p]["value"] - eta*issue_weight*utils.vec_grad(avg_g.nodes()[p]["value"], issue_vec)
+
+        # diagnostic info for change in node values
+        if(save_period and (iter % save_period == 0 or iter == iters-1)):
+            update_mag = sum([np.linalg.norm(avg_g.nodes()[n]["next_value"] - avg_g.nodes()[n]["value"]) for n in path[1:]])
+            loss = loss_cos_dist(avg_g) 
+            d_hist["UPDATE_MAG"].append(update_mag)
+            d_hist["LOSS"].append(loss)
+            for k in hist.keys():
+                hist[k].append(avg_g.nodes()[k]["value"])
+        if(print_period and (iter % print_period == 0 or iter == iters-1)):
+            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
+
+        for p in path:
+            avg_g.nodes()[p]["value"] = avg_g.nodes()[p]["next_value"]
+
+    for n in avg_g.nodes():
+        g.nodes()[n]["value"] = avg_g.nodes()[n]["value"]
+
+    return hist, d_hist
+        
         
 
 
