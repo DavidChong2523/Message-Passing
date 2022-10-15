@@ -24,8 +24,8 @@ def remove_auxiliary_nodes(g):
 def get_ques_val(ques):
     for q, v in constants.QUES_VAL.items():
         if(re.match(q, ques, re.IGNORECASE)):
-            return v
-    return None
+            return v, q
+    return None, None
 
 # angle [0, 2pi) to unit vector
 def angle_to_vec(angle):

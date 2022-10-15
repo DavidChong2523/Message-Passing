@@ -17,8 +17,9 @@ def load_graph_csv(fname, process_names=True, with_dates=False, raw_answer=False
     if(with_dates):
         df["publish_date"] = df["publish_date"].fillna("")
 
+    edge_questions = defaultdict(set)
     for _, row in df.iterrows():
-        edge_weight = utils.get_ques_val(row["valence"])
+        edge_weight, ques = utils.get_ques_val(row["valence"])
         if(not edge_weight):
             continue
 
@@ -33,6 +34,10 @@ def load_graph_csv(fname, process_names=True, with_dates=False, raw_answer=False
             )
         elif(raw_answer):
             source, target = row["from_node"].lower(), row["raw_answer"].lower()
+            if((ques in edge_questions[(source, target)]) or (ques in edge_questions[(target, source)])):
+                continue
+            edge_questions[(source, target)].add(ques)
+            edge_questions[(target, source)].add(ques)
             g.add_edge(source, target,
                 weight=edge_weight,
                 valence=row["valence"],
@@ -142,19 +147,11 @@ def process_node_names(df):
             print(span.strip().split(" "))
             return ""
 
-    #diffs = defaultdict(set)
     for i, row in df.iterrows():
         source, target = row["from_node"], row["raw_answer"]
         processed_source, processed_target = process(source), process(target)
         df.loc[i, ["from_node"]] = [processed_source]
         df.loc[i, ["raw_answer"]] = [processed_target]
-
-        #if(processed_source != source):
-        #    diffs[processed_source].add(source)
-        #if(processed_target != target):
-        #    diffs[processed_target].add(target)
-    #return diffs
-
 
 # initialize node values as unit vector
 def initialize_node_values(g, mean, std, size=1, square=False):
@@ -266,15 +263,19 @@ def prune_graph(g):
 
 # populate auxiliary nodes based on core node values
 # aux_nodes is an array of auxiliary nodes ordered such that m < n if dist(m, core node) < dist(n, core node)
+# uninitialized nodes in g have a value equal to the zero vector
 def set_auxiliary_values(g, aux_nodes):
     for n in aux_nodes:
-        # only one neighbor
         for n, neighbor, w in g.edges(n, data="weight"):
+            # skip the uninitialized neighbor
+            if(not np.any(g.nodes()[neighbor]["value"])):
+                continue
+            # assign to n based on initialized neighbor
             if(w > 0):
-                g.nodes()[neighbor]["value"] = g.nodes()[n]["value"]
+                g.nodes()[n]["value"] = g.nodes()[neighbor]["value"]
             elif(w < 0):
                 # reflect neighbor value to opposite side of unit sphere
-                g.nodes()[neighbor]["value"] = -1*g.nodes()[n]["value"]
+                g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
 
 def pass_messages(g, eta_p, eta_n, iters, use_heat, stop_thresh=None, print_period=None, save_period=None, history={}):
     msg_g, aux_nodes = prune_graph(g)
