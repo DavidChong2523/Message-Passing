@@ -280,11 +280,7 @@ def pass_messages(g, eta_p, eta_n, iters, use_heat, pruning=True, stop_thresh=No
     msg_g, aux_nodes = g, []
     if(pruning):
         msg_g, aux_nodes = prune_graph(g)
-    # TRAIL EXTREME EDGE WEIGHTS
-    train_g = extreme_edge_weights(msg_g)
-    history, diagnostic_hist = iterate(train_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
-    for n in train_g.nodes():
-        msg_g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
+    history, diagnostic_hist = iterate(msg_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
     for n in msg_g.nodes():
         g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
     if(pruning):
