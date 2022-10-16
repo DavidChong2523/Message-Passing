@@ -387,7 +387,16 @@ def avg_edge_weights(g):
                 
     return avg_g
 
-def trial(g, iters, eta, discount=1, path_length=10, print_period=None, save_period=None, hist={}):
+
+
+def random_dir(shape):
+    direction = np.random.random(size=shape) - 0.5
+    direction = utils.unit_vec(direction)
+    return direction
+
+            
+            
+def train_issue_vec(g, iters, eta, discount=1, path_length=10, use_heat=True, print_period=None, save_period=None, hist={}):
     path_g = g.copy()
     for u, v, k in g.edges(keys=True):
         path_g[u][v][k]["weight"] = 1.0
@@ -398,13 +407,21 @@ def trial(g, iters, eta, discount=1, path_length=10, print_period=None, save_per
 
     d_hist = defaultdict(list)
     paths = nx.generate_random_paths(path_g, iters, path_length=path_length)
+    heat = 0
     for iter, path in enumerate(paths):
+        if(use_heat):
+            heat = 1 - (iter+1)/(iters)
         path = list(path)
         issue_vec = avg_g.nodes()[path[0]]["value"]
         issue_weight = 1
         for i, p in enumerate(path[1:]):
             issue_weight *= discount*g[p][path[i]][0]["weight"]
-            avg_g.nodes()[p]["next_value"] = avg_g.nodes()[p]["value"] - eta*issue_weight*utils.vec_grad(avg_g.nodes()[p]["value"], issue_vec)
+            if(np.random.random() < heat):
+                next_val = avg_g.nodes()[p]["value"] + eta * random_dir(avg_g.nodes()[p]["value"].shape)
+            else:
+                next_val = avg_g.nodes()[p]["value"] - eta*issue_weight*utils.vec_grad(avg_g.nodes()[p]["value"], issue_vec)
+            next_val = utils.unit_vec(next_val)
+            avg_g.nodes()[p]["next_value"] = next_val
 
         # diagnostic info for change in node values
         if(save_period and (iter % save_period == 0 or iter == iters-1)):
@@ -425,7 +442,79 @@ def trial(g, iters, eta, discount=1, path_length=10, print_period=None, save_per
 
     return hist, d_hist
         
-        
+# vals is a list of (weight, issue_vec)
+def update_node(node_val, vals, eta_p, eta_n):
+    next_val = np.copy(node_val)
+    
+    # HANDLE GRAD 0 AT LOCAL MAX?
+    pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
+    for e, v in vals:
+        if(e > 0):
+            pos_nodes.append(v)
+            pos_edges.append(e)
+        elif(e < 0):
+            neg_nodes.append(v)
+            neg_edges.append(e)
+    pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
+    neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
+    if(len(pos_edges) > 0):
+        pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
+        next_val -= eta_p * utils.vec_grad(node_val, pos_avg)     
+    if(len(neg_edges) > 0):
+        neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
+        next_val += eta_n * utils.vec_grad(node_val, neg_avg) 
+    next_val = utils.unit_vec(next_val)
+    return next_val    
 
 
+
+def train_issue_vec_batch(g, iters, eta_p, eta_n, discount=1, path_length=10, batch_size=10, use_heat=True, print_period=None, save_period=None, hist={}):
+    path_g = g.copy()
+    for u, v, k in g.edges(keys=True):
+        path_g[u][v][k]["weight"] = 1.0
+
+    avg_g = avg_edge_weights(g)
+    for n in avg_g.nodes():
+        avg_g.nodes()[n]["next_value"] = avg_g.nodes()[n]["value"]
+
+    d_hist = defaultdict(list)
+    heat = 0
+    for iter in range(iters):
+        if(use_heat):
+            heat = 1 - (iter+1)/(iters)
+        paths = nx.generate_random_paths(path_g, batch_size, path_length=path_length)
+        update_nodes = defaultdict(list)
+        for i, path in enumerate(paths):
+            path = list(path)
+            issue_vec = avg_g.nodes()[path[0]]["value"]
+            issue_weight = 1
+            for i, p in enumerate(path[1:]):
+                issue_weight *= discount*g[p][path[i]][0]["weight"]
+                update_nodes[p].append((issue_weight, issue_vec))
+        for n, vals in update_nodes.items():
+            if(np.random.random() < heat):
+                next_val = avg_g.nodes()[n]["value"] + (eta_p+eta_n)/2 * random_dir(avg_g.nodes()[n]["value"].shape)
+            else:
+                next_val = update_node(avg_g.nodes()[n]["value"], vals, eta_p, eta_n)
+            next_val = utils.unit_vec(next_val)
+            avg_g.nodes()[n]["next_value"] = next_val
+
+        # diagnostic info for change in node values
+        if(save_period and (iter % save_period == 0 or iter == iters-1)):
+            update_mag = sum([np.linalg.norm(avg_g.nodes()[n]["next_value"] - avg_g.nodes()[n]["value"]) for n in update_nodes.keys()])
+            loss = loss_cos_dist(avg_g) 
+            d_hist["UPDATE_MAG"].append(update_mag)
+            d_hist["LOSS"].append(loss)
+            for k in hist.keys():
+                hist[k].append(avg_g.nodes()[k]["next_value"])
+        if(print_period and (iter % print_period == 0 or iter == iters-1)):
+            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
+
+        for n in update_nodes.keys():
+            avg_g.nodes()[n]["value"] = avg_g.nodes()[n]["next_value"]
+
+    for n in avg_g.nodes():
+        g.nodes()[n]["value"] = avg_g.nodes()[n]["value"]
+
+    return hist, d_hist
     
