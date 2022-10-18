@@ -555,9 +555,14 @@ def update_node_issue_vec(g, n, eta_p, eta_n, discount, path_length, batch_size)
     next_val = update_node(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
     return next_val
 
-def train_issue_vec_message_passing(g, iters, eta_p, eta_n, discount=1, path_length=10, batch_size=10, use_heat=True, print_period=None, save_period=None, hist={}):
-    train_g = avg_edge_weights(g)
-    #train_g = extreme_edge_weights(g)
+
+def train_issue_vec_message_passing(g, iters, eta_p, eta_n, discount=1, path_length=10, batch_size=10, pruning=True, use_heat=True, print_period=None, save_period=None, hist={}):
+    msg_g, aux_nodes = g, []
+    if(pruning):
+        msg_g, aux_nodes = prune_graph(g)
+
+    train_g = avg_edge_weights(msg_g)
+    #train_g = extreme_edge_weights(msg_g)
     for n in train_g.nodes():
         train_g.nodes()[n]["next_value"] = train_g.nodes()[n]["value"]
 
@@ -590,7 +595,11 @@ def train_issue_vec_message_passing(g, iters, eta_p, eta_n, discount=1, path_len
             train_g.nodes()[n]["value"] = train_g.nodes()[n]["next_value"]
 
     for n in train_g.nodes():
-        g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
+        msg_g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
+    for n in msg_g.nodes():
+        g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
+    if(pruning):
+        set_auxiliary_values(g, aux_nodes)
 
     return hist, d_hist
     
