@@ -31,9 +31,12 @@ def remove_auxiliary_nodes(g):
     return to_remove, len(to_remove)
 
 def get_ques_val(ques):
+    ques = ques.lower()
     for q, v in constants.QUES_VAL.items():
-        if(re.match(q, ques, re.IGNORECASE)):
-            return v, q
+        q = q.lower().split(".*") 
+        prefix, suffix = q[0], q[-1]
+        if(ques[:len(prefix)] == prefix and ques[-len(suffix):] == suffix):
+            return v, ".*".join(q)
     return None, None
 
 # angle [0, 2pi) to unit vector

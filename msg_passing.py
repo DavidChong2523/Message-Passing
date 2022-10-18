@@ -535,4 +535,62 @@ def train_issue_vec_batch(g, iters, eta_p, eta_n, discount=1, path_length=10, ba
         g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
 
     return hist, d_hist
+
+
+def update_node_issue_vec(g, n, eta_p, eta_n, discount, path_length, batch_size):
+    # stores tuples of (issue_weight, issue_vector)
+    update_nodes = []
+    for _ in range(batch_size):
+        # initialize to 1/discount so the discount only applies on the second step of the path
+        issue_weight = 1/discount
+        curr_node = n 
+        for _ in range(path_length):
+            next_node = random.choice(list(g.neighbors(curr_node)))
+            issue_weight *= discount*g[curr_node][next_node][0]["weight"]
+            issue_vec = g.nodes()[next_node]["value"]
+            update_nodes.append((issue_weight, issue_vec))
+
+            curr_node = next_node
+
+    next_val = update_node(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
+    return next_val
+
+def train_issue_vec_message_passing(g, iters, eta_p, eta_n, discount=1, path_length=10, batch_size=10, use_heat=True, print_period=None, save_period=None, hist={}):
+    train_g = avg_edge_weights(g)
+    #train_g = extreme_edge_weights(g)
+    for n in train_g.nodes():
+        train_g.nodes()[n]["next_value"] = train_g.nodes()[n]["value"]
+
+    d_hist = defaultdict(list)
+    heat = 0
+    for iter in range(iters):
+        if(use_heat):
+            heat = 1 - (iter+1)/(iters)
+
+        for n in train_g.nodes():
+            if(np.random.random() < heat):
+                random_vec = random_dir(train_g.nodes()[n]["value"].shape)
+                next_val = train_g.nodes()[n]["value"] + (eta_p+eta_n)/2 * random_vec
+            else:
+                next_val = update_node_issue_vec(train_g, n, eta_p, eta_n, discount, path_length, batch_size)
+            train_g.nodes()[n]["next_value"] = next_val
+
+        # diagnostic info for change in node values
+        if(save_period and (iter % save_period == 0 or iter == iters-1)):
+            update_mag = sum([np.linalg.norm(train_g.nodes()[n]["next_value"] - train_g.nodes()[n]["value"]) for n in train_g.nodes()])
+            loss = loss_cos_dist(train_g) 
+            d_hist["UPDATE_MAG"].append(update_mag)
+            d_hist["LOSS"].append(loss)
+            for k in hist.keys():
+                hist[k].append(train_g.nodes()[k]["next_value"])
+        if(print_period and (iter % print_period == 0 or iter == iters-1)):
+            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
+
+        for n in train_g.nodes():
+            train_g.nodes()[n]["value"] = train_g.nodes()[n]["next_value"]
+
+    for n in train_g.nodes():
+        g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
+
+    return hist, d_hist
     
