@@ -544,12 +544,16 @@ def update_node_issue_vec(g, n, eta_p, eta_n, discount, path_length, batch_size)
         # initialize to 1/discount so the discount only applies on the second step of the path
         issue_weight = 1/discount
         curr_node = n 
+        curr_path_nodes = set()
         for _ in range(path_length):
             next_node = random.choice(list(g.neighbors(curr_node)))
+            if(next_node in curr_path_nodes):
+                break
             issue_weight *= discount*g[curr_node][next_node][0]["weight"]
             issue_vec = g.nodes()[next_node]["value"]
             update_nodes.append((issue_weight, issue_vec))
 
+            curr_path_nodes.add(next_node)
             curr_node = next_node
 
     next_val = update_node(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
