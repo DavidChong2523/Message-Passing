@@ -225,15 +225,18 @@ def pass_messages_on_graph(g, update_node_func, eta_p, eta_n, iters, use_heat, p
                 next_val = update_node_func(g, n, eta_p, eta_n, **kwargs)
             g.nodes()[n]["next_value"] = next_val
             
-        # diagnostic info for change in node values    
-        if(save_period and (iter % save_period == 0 or iter == iters-1)):
+        # diagnostic info for change in node values  
+        save_cond = save_period and (iter % save_period == 0 or iter == iters-1)
+        print_cond = print_period and (iter % print_period == 0 or iter == iters-1)
+        if(save_cond or print_cond):
             update_mag = sum([np.linalg.norm(g.nodes()[n]["next_value"] - g.nodes()[n]["value"]) for n in g.nodes()])
-            loss = loss_cos_dist(g) 
+            loss = loss_cos_dist(g)          
+        if(save_cond):
             diagnostic_hist["UPDATE_MAG"].append(update_mag)
             diagnostic_hist["LOSS"].append(loss)
             for k in history.keys():
                 history[k].append(g.nodes()[k]["next_value"])
-        if(print_period and (iter % print_period == 0 or iter == iters-1)):
+        if(print_cond):       
             print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
  
         for n in g.nodes():
