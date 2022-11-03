@@ -56,9 +56,6 @@ def clean_df(df, source_col="from_node", target_col="raw_answer"):
         df.loc[i, [source_col]] = [processed_source]
         df.loc[i, [target_col]] = [processed_target]
 
-        if(i % 1000 == 0):
-            print(i)
-
     # remove rows with empty source or target
     df[source_col].replace("", np.nan, inplace=True)
     df[target_col].replace("", np.nan, inplace=True) 
