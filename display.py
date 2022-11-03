@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
+import plotly.express as px 
+import pandas as pd 
+import sklearn.cluster 
+from collections import defaultdict
 
 import utils
 
@@ -36,7 +40,7 @@ def plot_diagnostic(diagnostic_hist):
     plt.ylabel("update magnitude")
     plt.legend()
     plt.show()
-    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], np.array(diagnostic_hist["LOSS"])/589, label="loss")
+    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], np.array(diagnostic_hist["LOSS"]), label="loss")
     plt.title("loss")
     plt.ylabel("loss")
     plt.xlabel("iterations")
@@ -76,8 +80,65 @@ def plot_final_values(g, nodes, target=None):
 
         plt.scatter(i, val, label=n, color=colors[i])
     plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    plt.title("final node values")
+    if(not target):
+        plt.title("final node values")
+    else:
+        plt.title(f"final angles with reference node '{target}'")
     plt.ylabel("angle with target node")
     plt.xlabel("nodes")
     plt.rcParams["figure.figsize"] = (10,5)
     plt.show()
+
+
+def cos_dist_histogram(g, title=""):
+    show_title = "histogram of pairwise cos distances"
+    if(title != ""):
+        show_title += ": " + title
+    distances = [utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"]) for u, v in g.edges()]
+    dist_df = pd.DataFrame({"pairwise cosine distances": distances})
+    fig = px.histogram(dist_df, x="pairwise cosine distances", title=show_title)
+    fig.show()
+    return fig
+
+def confusion_matrix(g, k, title=""):
+    nodes = [n[0] for n in utils.node_degrees(g)[:k]]
+    return node_confusion_matrix(g, nodes, title=title)
+
+def node_confusion_matrix(g, nodes, title=""):
+    confusion_matrix = np.zeros((len(nodes), len(nodes)))
+    
+    for i, u in enumerate(nodes):
+        for j, v in enumerate(nodes):
+            confusion_matrix[i][j] = utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"])
+    
+    nclusters = 2
+    model = sklearn.cluster.SpectralCoclustering(n_clusters=nclusters, random_state=0) 
+    model.fit(confusion_matrix) 
+    row_inds = np.argsort(model.row_labels_)
+    col_inds = np.argsort(model.column_labels_)
+    out_matrix = confusion_matrix[row_inds]
+    out_matrix = out_matrix[:, row_inds]
+    
+    row = [nodes[i] for i in row_inds]
+    col = [nodes[i] for i in col_inds]
+    labels = {
+        "color": "cos dist",
+        
+    }
+    show_title = "confusion matrix"
+    if(title != ""):
+        show_title += ": " + title
+    fig = px.imshow(out_matrix, x=row, y=row, title=show_title, labels=labels)
+    fig.update_layout(yaxis_nticks=len(nodes), xaxis_nticks=len(nodes))
+    fig.show()
+    return fig 
+
+def plot_3D_node_values(g, nodes):
+    vals = [g.nodes()[n]["value"] for n in nodes]
+    x = [v[0] for v in vals]
+    y = [v[1] for v in vals]
+    z = [v[2] for v in vals] 
+    df = {"x": x, "y": y, "z": z, "node": nodes}
+    fig = px.scatter_3d(df, x="x", y="y", z="z", color="node", title="Node values")
+    fig.show()
+    return fig
