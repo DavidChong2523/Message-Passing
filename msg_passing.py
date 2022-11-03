@@ -105,6 +105,23 @@ def avg_edge_weights(g):
                 
     return avg_g
 
+def extreme_edge_weights(g):
+    process_g = nx.create_empty_copy(g)
+    for u, v in g.edges():
+        edge_weights = [e["weight"] for e in g[u][v].values()]
+        max_weight = max(edge_weights)
+        min_weight = max(edge_weights)
+        if(max_weight == min_weight):
+            process_g.add_edge(u, v, weight=max_weight)
+        elif(abs(max_weight) > abs(min_weight)):
+            process_g.add_edge(u, v, weight=max_weight)
+        elif(abs(min_weight) > abs(max_weight)):
+            process_g.add_edge(u, v, weight=min_weight)
+        else:
+            process_g.add_edge(u, v, weight=0) # can disconnect graph
+    return process_g
+    
+
 # iteratively remove auxiliary nodes from graph
 # returns pruned graph, list of auxiliary nodes ordered such that m < n if dist(m, core node) < dist(n, core node)
 def prune_graph(g):
