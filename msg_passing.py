@@ -9,14 +9,14 @@ import random
 import itertools
 
 import utils
+import parse_data
 
-def load_graph_csv(fname, process_names=True, with_dates=False, raw_answer=False, minimal_answer=False):
+def load_graph_csv(fname, clean_data=False, source_col="from_node", target_col="raw_answer"):
     g = nx.MultiGraph()
     df = pd.read_csv(fname)
-    if(process_names):
-        process_node_names(df)
-    if(with_dates):
-        df["publish_date"] = df["publish_date"].fillna("")
+    df["publish_date"] = df["publish_date"].fillna("")
+    if(clean_data):
+        parse_data.clean_df(df)
 
     edge_questions = defaultdict(set)
     for _, row in df.iterrows():
@@ -24,54 +24,28 @@ def load_graph_csv(fname, process_names=True, with_dates=False, raw_answer=False
         if(not edge_weight):
             continue
 
-        if(with_dates):
-            source, target = row["from_node"].lower(), row["to_node"].lower()
-            g.add_edge(source, target,
-                weight=edge_weight,
-                valence=row["valence"],
-                confidence=row["confidence"],
-                #full_text=row["full_text"],
-                publish_date=row["publish_date"]
-            )
-        elif(raw_answer):
-            source, target = row["from_node"].lower(), row["raw_answer"].lower()
-            if((ques in edge_questions[(source, target)]) or (ques in edge_questions[(target, source)])):
+        # don't add duplicate questions to the graph
+        source, target = row[source_col], row[target_col]
+        if((ques in edge_questions[(source, target)]) or (ques in edge_questions[(target, source)])):
                 continue
-            edge_questions[(source, target)].add(ques)
-            edge_questions[(target, source)].add(ques)
-            g.add_edge(source, target,
-                weight=edge_weight,
-                valence=row["valence"],
-                confidence=row["confidence"],
-                #full_text=row["full_text"],
-                publish_date=row["publish_date"]
-            )
-        elif(minimal_answer):
-            source, target, raw_target = row["from_node"].lower(), row["to_node"].lower(), row["raw_answer"].lower()
-            if(target != raw_target):
-                continue
-            g.add_edge(source, target,
-                weight=edge_weight,
-                valence=row["valence"],
-                confidence=row["confidence"],
-                #full_text=row["full_text"],
-                publish_date=row["publish_date"]
-            )
-        else:
-            source, target = row["source"].lower(), row["target"].lower()
-            g.add_edge(source, target,
-                weight=edge_weight,
-                valence=row["valence"],
-                confidence=row["confidence"],
-                full_text=row["full_text"],
-                #summary=row["summary"],
-                #keywords=row["keywords"],
-                #publish_date=row["publish_date"],
-                #authors=row["authors"],
-                #url=row["url"],
-                #leaf_label=row["leaf_label"],
-                #root_label=row["root_label"]
-            )
+        edge_questions[(source, target)].add(ques)
+        edge_questions[(target, source)].add(ques)
+        
+        source, target = row[source_col], row[target_col]
+        g.add_edge(source, target,
+            weight=edge_weight,
+            valence=row["valence"],
+            confidence=row["confidence"],
+            publish_date=row["publish_date"],
+            #full_text=row["full_text"],
+            #summary=row["summary"],
+            #keywords=row["keywords"],
+            #publish_date=row["publish_date"],
+            #authors=row["authors"],
+            #url=row["url"],
+            #leaf_label=row["leaf_label"],
+            #root_label=row["root_label"]
+        )
 
     return g
 
@@ -109,51 +83,6 @@ def load_history(save_file):
         save_obj = pickle.load(f)
     return save_obj["hist"], save_obj["diagnostic_hist"]
 
-def process_node_names(df):
-    # remove leading 'the'
-    def remove_prefix_the(span):
-        span = span.strip().lower()
-        words = span.split(" ")
-        while(True):
-            if(words[0] == "the"):
-                words = words[1:]
-            else:
-                break
-        return " ".join(words)
-
-    # remove ending possessives: 's's's's or s'
-    def remove_possessive(span):
-        span = span.strip().lower()
-        words = span.split(" ")
-        while(True):
-            #print("WORDS:", words)
-            # change to just remove unicode instead of or statement?
-            if(words[-1] == "'s" or words[-1] == "’s" or words[-1] == "'" or words[-1] == ""):
-                words = words[:-1]
-            elif(words[-1][-2:] == "'s" or words[-1][-2:] == "’s"):
-                words[-1] = words[-1][:-2]
-            elif(words[-1][-1] == "'"):
-                words[-1] = words[-1][:-1]
-            else:
-                break
-        return " ".join(words)
-
-    def process(span):
-        try:
-            span = remove_prefix_the(span)
-            span = remove_possessive(span)
-            return span
-        except Exception as e:
-            print("ERROR:", e)
-            print(span.strip().split(" "))
-            return ""
-
-    for i, row in df.iterrows():
-        source, target = row["from_node"], row["raw_answer"]
-        processed_source, processed_target = process(source), process(target)
-        df.loc[i, ["from_node"]] = [processed_source]
-        df.loc[i, ["raw_answer"]] = [processed_target]
-
 # initialize node values as unit vector
 def initialize_node_values(g, size=1):
     for n in g.nodes():
@@ -161,91 +90,20 @@ def initialize_node_values(g, size=1):
         vec = vec.reshape((size,))
         g.nodes()[n]["value"] = utils.unit_vec(vec)
 
-# update node n with the gradient of the cos distance loss
-def update_cos_dist(g, n, eta_p, eta_n):
-    # store tuples of (adjacent node value, edge weight)
-    edge_vals = [(g.nodes[v]["value"], w) for _, v, w in g.edges(n, data="weight")] 
-    next_val = np.copy(g.nodes()[n]["value"])
-    
-    # HANDLE GRAD 0 AT LOCAL MAX?
-    pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
-    for v, e in edge_vals:
-        if(e > 0):
-            pos_nodes.append(v)
-            pos_edges.append(e)
-        elif(e < 0):
-            neg_nodes.append(v)
-            neg_edges.append(e)
-    pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
-    neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
-    if(len(pos_edges) > 0):
-        pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
-        next_val -= eta_p * utils.vec_grad(g.nodes()[n]["value"], pos_avg)     
-    if(len(neg_edges) > 0):
-        neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
-        next_val += eta_n * utils.vec_grad(g.nodes()[n]["value"], neg_avg) 
-    next_val = utils.unit_vec(next_val)
-    return next_val    
-
 # compute cosine distance loss over graph g
 def loss_cos_dist(g):
     loss = [w*utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"])
             for u, v, w in g.edges(data="weight")]
     return sum(loss)
-
-def propagate_messages(g, eta_p, eta_n, heat=0):
-    for n in g.nodes():
-        #eta_p, eta_n = adjust_lr(n, g, eta_p, eta_n)
-        
-        # simulated annealing
-        if(np.random.random() < heat):
-            direction = np.random.random(size=g.nodes()[n]["value"].shape) - 0.5
-            direction = utils.unit_vec(direction)
-            next_val = g.nodes()[n]["value"] + (eta_p+eta_n)/2 * direction
-            next_val = utils.unit_vec(next_val)
-        else:
-            next_val = update_cos_dist(g, n, eta_p, eta_n) 
     
-        g.nodes()[n]["next_value"] = next_val
-        
-    # diagnostic info for change in node values
-    update_mag = sum([np.linalg.norm(g.nodes()[n]["next_value"] - g.nodes()[n]["value"]) for n in g.nodes()])
-    loss = loss_cos_dist(g) 
-    
-    # update node values
-    for n in g.nodes():
-        g.nodes()[n]["value"] = g.nodes()[n]["next_value"]
-        
-    return update_mag, loss    
-
-def iterate(g, eta_p, eta_n, iters, stop_thresh=None, use_heat=False, print_period=None, history={}, save_period=1):
-    # initialize history
-    for k in history.keys():
-        history[k].append(g.nodes()[k]["value"])
-    diagnostic_hist = defaultdict(list)
-        
-    heat = 0
-    i = 0
-    while(True):
-        if(use_heat):
-            heat = 1 - (i+1)/(iters)
-        update_mag, loss = propagate_messages(g, eta_p, eta_n, heat=heat)
-        
-        if(save_period and (i % save_period == 0 or i == iters-1)):
-            for k in history.keys():
-                history[k].append(g.nodes()[k]["value"])
-            
-            diagnostic_hist["UPDATE_MAG"].append(update_mag)
-            diagnostic_hist["LOSS"].append(loss)
-        
-        if(print_period and (i % print_period == 0 or i == iters-1)):
-            print("iteration " + str(i) + ": update mag:", update_mag, "loss:", loss)
-            
-        i += 1
-        if(i == iters or (stop_thresh and update_mag < stop_thresh)):
-            break
-        
-    return history, diagnostic_hist
+def avg_edge_weights(g):
+    avg_g = nx.create_empty_copy(g)
+    for u, v in g.edges():
+        edge_weights = np.array([e["weight"] for e in g[u][v].values()])
+        avg_weight = np.average(edge_weights)
+        avg_g.add_edge(u, v, weight=avg_weight)
+                
+    return avg_g
 
 # iteratively remove auxiliary nodes from graph
 # returns pruned graph, list of auxiliary nodes ordered such that m < n if dist(m, core node) < dist(n, core node)
@@ -276,17 +134,133 @@ def set_auxiliary_values(g, aux_nodes):
                 # reflect neighbor value to opposite side of unit sphere
                 g.nodes()[n]["value"] = -1*g.nodes()[neighbor]["value"]
 
-def pass_messages(g, eta_p, eta_n, iters, use_heat, pruning=True, stop_thresh=None, print_period=None, save_period=None, history={}):
+# update target node with the gradient of the cos distance loss
+# vals is a list of (weight, message node value)
+def update_node_value(node_val, vals, eta_p, eta_n):
+    next_val = np.copy(node_val)
+    
+    # HANDLE GRAD 0 AT LOCAL MAX?
+    pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
+    for e, v in vals:
+        if(e > 0):
+            pos_nodes.append(v)
+            pos_edges.append(e)
+        elif(e < 0):
+            neg_nodes.append(v)
+            neg_edges.append(e)
+    pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
+    neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
+    if(len(pos_edges) > 0):
+        pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
+        next_val -= eta_p * utils.vec_grad(node_val, pos_avg)     
+    if(len(neg_edges) > 0):
+        neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
+        next_val += eta_n * utils.vec_grad(node_val, neg_avg) 
+    next_val = utils.unit_vec(next_val)
+    return next_val    
+
+# update node via message passing with neighbors
+def update_node_message_passing(g, n, eta_p, eta_n):
+    edge_vals = [(w, g.nodes[v]["value"]) for _, v, w in g.edges(n, data="weight")]    
+    return update_node_value(g.nodes()[n]["value"], edge_vals, eta_p, eta_n)
+
+# update node via message passing with random walks
+def update_node_random_walk(g, n, eta_p, eta_n, discount, path_length, batch_size, allow_loops=True):
+    # stores tuples of (issue_weight, issue_vector)
+    update_nodes = []
+    for _ in range(batch_size):
+        # initialize to 1/discount so the discount only applies on the second step of the path
+        issue_weight = 1/discount
+        curr_node = n 
+        visited_nodes = set()
+        for _ in range(path_length):
+            next_node = random.choice(list(g.neighbors(curr_node)))
+            if((not allow_loops) and (next_node in visited_nodes)):
+                break
+            issue_weight *= discount*g[curr_node][next_node][0]["weight"]
+            issue_vec = g.nodes()[next_node]["value"]
+            update_nodes.append((issue_weight, issue_vec))
+
+            visited_nodes.add(next_node)
+            curr_node = next_node
+
+    next_val = update_node_value(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
+    return next_val
+
+def pass_messages_on_graph(g, update_node_func, eta_p, eta_n, iters, use_heat, print_period=None, save_period=None, history={}, **kwargs):
+    # initialize history
+    diagnostic_hist = defaultdict(list)
+    for k in history.keys():
+        history[k].append(g.nodes()[k]["value"])
+        
+    heat = 0
+    for iter in range(iters): 
+        if(use_heat):
+            heat = 1 - (iter+1)/(iters)
+
+        for n in g.nodes():
+            if(np.random.random() < heat): 
+                # simulated annealing
+                random_vec = utils.random_dir(g.nodes()[n]["value"].shape)
+                next_val = g.nodes()[n]["value"] + (eta_p+eta_n)/2 * random_vec
+                next_val = utils.unit_vec(next_val)
+            else:
+                next_val = update_node_func(g, n, eta_p, eta_n, **kwargs)
+            g.nodes()[n]["next_value"] = next_val
+            
+        # diagnostic info for change in node values    
+        if(save_period and (iter % save_period == 0 or iter == iters-1)):
+            update_mag = sum([np.linalg.norm(g.nodes()[n]["next_value"] - g.nodes()[n]["value"]) for n in g.nodes()])
+            loss = loss_cos_dist(g) 
+            diagnostic_hist["UPDATE_MAG"].append(update_mag)
+            diagnostic_hist["LOSS"].append(loss)
+            for k in history.keys():
+                history[k].append(g.nodes()[k]["next_value"])
+        if(print_period and (iter % print_period == 0 or iter == iters-1)):
+            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
+ 
+        for n in g.nodes():
+            g.nodes()[n]["value"] = g.nodes()[n]["next_value"]
+
+    return history, diagnostic_hist
+
+def pass_messages(g, eta_p, eta_n, iters, use_heat, pruning=True, print_period=None, save_period=None, history={}):
     msg_g, aux_nodes = g, []
     if(pruning):
         msg_g, aux_nodes = prune_graph(g)
-    history, diagnostic_hist = iterate(msg_g, eta_p, eta_n, iters, print_period=print_period, stop_thresh=stop_thresh, use_heat=use_heat, history=history, save_period=save_period)
+
+    history, diagnostic_hist = pass_messages_on_graph(
+        msg_g, update_node_message_passing, eta_p, eta_n, iters, use_heat, 
+        print_period=print_period, save_period=save_period, history=history
+    )
+
     for n in msg_g.nodes():
         g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
     if(pruning):
         set_auxiliary_values(g, aux_nodes)
+
     return history, diagnostic_hist
 
+def pass_messages_with_random_walks(g, eta_p, eta_n, iters, use_heat, pruning=True, print_period=None, save_period=None, history={}, discount=1, path_length=10, batch_size=10):
+    msg_g, aux_nodes = g, []
+    if(pruning):
+        msg_g, aux_nodes = prune_graph(g)
+
+    msg_g = avg_edge_weights(msg_g)
+    #msg_g = extreme_edge_weights(msg_g)
+
+    history, diagnostic_hist = pass_messages_on_graph(
+        msg_g, update_node_random_walk, eta_p, eta_n, iters, use_heat, 
+        print_period=print_period, save_period=save_period, history=history, 
+        discount=discount, path_length=path_length, batch_size=batch_size
+    )
+
+    for n in msg_g.nodes():
+        g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
+    if(pruning):
+        set_auxiliary_values(g, aux_nodes)
+
+    return history, diagnostic_hist
 
 # input is initialized larget connected component of graph
 # history is a dictionary of {date: {node_name: []}}
@@ -323,287 +297,4 @@ def generate_graph_date_range(g, step):
     start, end = str(dates[0])[:len(DATE_FORMAT)+1], str(dates[-1])[:len(DATE_FORMAT)+1]
     return utils.generate_date_range(start, end, step)
 
-def load_graph_time_series(dir):
-    for fname in os.listdir(dir):
-        print(fname)
 
-# compute optimal value of node n with respect to its neighbors
-def compute_optimal_value(g, n):
-    # store tuples of (adjacent node value, edge weight)
-    edge_vals = [(g.nodes[v]["value"], w) for _, v, w in g.edges(n, data="weight")] 
-
-    pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
-    for v, e in edge_vals:
-        if(e > 0):
-            pos_nodes.append(v)
-            pos_edges.append(e)
-        elif(e < 0):
-            neg_nodes.append(v)
-            neg_edges.append(e)
-    pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
-    neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
-    pos_avg = np.zeros(g.nodes()[n]["value"].shape)
-    neg_avg = np.zeros(g.nodes()[n]["value"].shape)
-    if(len(pos_edges) > 0):
-        pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)   
-    if(len(neg_edges) > 0):
-        neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
-    
-    # add noise
-    opt_val = pos_avg - neg_avg
-    direction = np.random.random(size=g.nodes()[n]["value"].shape) - 0.5
-    direction = utils.unit_vec(direction)
-    opt_val = opt_val + 10**-2 * direction
-    opt_val = utils.unit_vec(opt_val)
-    return opt_val   
-
-
-def initialize_with_reference_nodes(g, size):
-    total_nodes = len(g.nodes())
-    for n in g.nodes():
-        g.nodes()[n]["value"] = np.zeros(size)
-
-    curr_nodes = set([nd[0] for nd in utils.node_degrees(g)[0:10]])
-    for n in curr_nodes:
-        g.nodes()[n]["value"] = utils.unit_vec(np.random.uniform(low=-1.0, high=1.0, size=size))
-
-    curr_boundary = curr_nodes
-    while(len(curr_nodes) < total_nodes):
-        # add edges out of current boundary
-        neighbors = []
-        for boundary_node in curr_boundary:
-            neighbors += list(g.neighbors(boundary_node))
-        curr_boundary = set(neighbors)
-        curr_nodes.update(curr_boundary)
-        for n in curr_boundary:
-            g.nodes()[n]["value"] = compute_optimal_value(g, n)
-
-def avg_edge_weights(g):
-    avg_g = nx.create_empty_copy(g)
-    for u, v in g.edges():
-        edge_weights = np.array([e["weight"] for e in g[u][v].values()])
-        avg_weight = np.average(edge_weights)
-        avg_g.add_edge(u, v, weight=avg_weight)
-                
-    return avg_g
-
-def extreme_edge_weights(g):
-    process_g = nx.create_empty_copy(g)
-    for u, v in g.edges():
-        edge_weights = [e["weight"] for e in g[u][v].values()]
-        max_weight = max(edge_weights)
-        min_weight = max(edge_weights)
-        if(max_weight == min_weight):
-            process_g.add_edge(u, v, weight=max_weight)
-        elif(abs(max_weight) > abs(min_weight)):
-            process_g.add_edge(u, v, weight=max_weight)
-        elif(abs(min_weight) > abs(max_weight)):
-            process_g.add_edge(u, v, weight=min_weight)
-        else:
-            # KEEP? COULD DISCONNECT GRAPH
-            process_g.add_edge(u, v, weight=0)
-    return process_g
-        
-
-
-def random_dir(shape):
-    direction = np.random.random(size=shape) - 0.5
-    direction = utils.unit_vec(direction)
-    return direction
-
-            
-            
-def train_issue_vec(g, iters, eta, discount=1, path_length=10, use_heat=True, print_period=None, save_period=None, hist={}):
-    path_g = g.copy()
-    for u, v, k in g.edges(keys=True):
-        path_g[u][v][k]["weight"] = 1.0
-
-    avg_g = avg_edge_weights(g)
-    for n in avg_g.nodes():
-        avg_g.nodes()[n]["next_value"] = avg_g.nodes()[n]["value"]
-
-    d_hist = defaultdict(list)
-    paths = nx.generate_random_paths(path_g, iters, path_length=path_length)
-    heat = 0
-    for iter, path in enumerate(paths):
-        if(use_heat):
-            heat = 1 - (iter+1)/(iters)
-        path = list(path)
-        issue_vec = avg_g.nodes()[path[0]]["value"]
-        issue_weight = 1
-        for i, p in enumerate(path[1:]):
-            issue_weight *= discount*g[p][path[i]][0]["weight"]
-            if(np.random.random() < heat):
-                next_val = avg_g.nodes()[p]["value"] + eta * random_dir(avg_g.nodes()[p]["value"].shape)
-            else:
-                next_val = avg_g.nodes()[p]["value"] - eta*issue_weight*utils.vec_grad(avg_g.nodes()[p]["value"], issue_vec)
-            next_val = utils.unit_vec(next_val)
-            avg_g.nodes()[p]["next_value"] = next_val
-
-        # diagnostic info for change in node values
-        if(save_period and (iter % save_period == 0 or iter == iters-1)):
-            update_mag = sum([np.linalg.norm(avg_g.nodes()[n]["next_value"] - avg_g.nodes()[n]["value"]) for n in path[1:]])
-            loss = loss_cos_dist(avg_g) 
-            d_hist["UPDATE_MAG"].append(update_mag)
-            d_hist["LOSS"].append(loss)
-            for k in hist.keys():
-                hist[k].append(avg_g.nodes()[k]["value"])
-        if(print_period and (iter % print_period == 0 or iter == iters-1)):
-            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
-
-        for p in path:
-            avg_g.nodes()[p]["value"] = avg_g.nodes()[p]["next_value"]
-
-    for n in avg_g.nodes():
-        g.nodes()[n]["value"] = avg_g.nodes()[n]["value"]
-
-    return hist, d_hist
-        
-# vals is a list of (weight, issue_vec)
-def update_node(node_val, vals, eta_p, eta_n):
-    next_val = np.copy(node_val)
-    
-    # HANDLE GRAD 0 AT LOCAL MAX?
-    pos_nodes, pos_edges, neg_nodes, neg_edges = [], [], [], []
-    for e, v in vals:
-        if(e > 0):
-            pos_nodes.append(v)
-            pos_edges.append(e)
-        elif(e < 0):
-            neg_nodes.append(v)
-            neg_edges.append(e)
-    pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
-    neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
-    if(len(pos_edges) > 0):
-        pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
-        next_val -= eta_p * utils.vec_grad(node_val, pos_avg)     
-    if(len(neg_edges) > 0):
-        neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
-        next_val += eta_n * utils.vec_grad(node_val, neg_avg) 
-    next_val = utils.unit_vec(next_val)
-    return next_val    
-
-
-
-def train_issue_vec_batch(g, iters, eta_p, eta_n, discount=1, path_length=10, batch_size=10, use_heat=True, print_period=None, save_period=None, hist={}):
-    path_g = g.copy()
-    for u, v, k in g.edges(keys=True):
-        path_g[u][v][k]["weight"] = 1.0
-
-    #avg_g = avg_edge_weights(g)
-    train_g = extreme_edge_weights(g)
-    for n in train_g.nodes():
-        train_g.nodes()[n]["next_value"] = train_g.nodes()[n]["value"]
-
-    d_hist = defaultdict(list)
-    heat = 0
-    for iter in range(iters):
-        if(use_heat):
-            heat = 1 - (iter+1)/(iters)
-        paths = nx.generate_random_paths(path_g, batch_size, path_length=path_length)
-        update_nodes = defaultdict(list)
-        for i, path in enumerate(paths):
-            path = list(path)
-            issue_vec = train_g.nodes()[path[0]]["value"]
-            issue_weight = 1
-            for i, p in enumerate(path[1:]):
-                issue_weight *= discount*g[p][path[i]][0]["weight"]
-                update_nodes[p].append((issue_weight, issue_vec))
-        for n, vals in update_nodes.items():
-            if(np.random.random() < heat):
-                next_val = train_g.nodes()[n]["value"] + (eta_p+eta_n)/2 * random_dir(train_g.nodes()[n]["value"].shape)
-            else:
-                next_val = update_node(train_g.nodes()[n]["value"], vals, eta_p, eta_n)
-            next_val = utils.unit_vec(next_val)
-            train_g.nodes()[n]["next_value"] = next_val
-
-        # diagnostic info for change in node values
-        if(save_period and (iter % save_period == 0 or iter == iters-1)):
-            update_mag = sum([np.linalg.norm(train_g.nodes()[n]["next_value"] - train_g.nodes()[n]["value"]) for n in update_nodes.keys()])
-            loss = loss_cos_dist(train_g) 
-            d_hist["UPDATE_MAG"].append(update_mag)
-            d_hist["LOSS"].append(loss)
-            for k in hist.keys():
-                hist[k].append(train_g.nodes()[k]["next_value"])
-        if(print_period and (iter % print_period == 0 or iter == iters-1)):
-            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
-
-        for n in update_nodes.keys():
-            train_g.nodes()[n]["value"] = train_g.nodes()[n]["next_value"]
-
-    for n in train_g.nodes():
-        g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
-
-    return hist, d_hist
-
-
-def update_node_issue_vec(g, n, eta_p, eta_n, discount, path_length, batch_size):
-    # stores tuples of (issue_weight, issue_vector)
-    update_nodes = []
-    for _ in range(batch_size):
-        # initialize to 1/discount so the discount only applies on the second step of the path
-        issue_weight = 1/discount
-        curr_node = n 
-        curr_path_nodes = set()
-        for _ in range(path_length):
-            next_node = random.choice(list(g.neighbors(curr_node)))
-            if(next_node in curr_path_nodes):
-                break
-            issue_weight *= discount*g[curr_node][next_node][0]["weight"]
-            issue_vec = g.nodes()[next_node]["value"]
-            update_nodes.append((issue_weight, issue_vec))
-
-            curr_path_nodes.add(next_node)
-            curr_node = next_node
-
-    next_val = update_node(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
-    return next_val
-
-
-def train_issue_vec_message_passing(g, iters, eta_p, eta_n, discount=1, path_length=10, batch_size=10, pruning=True, use_heat=True, print_period=None, save_period=None, hist={}):
-    msg_g, aux_nodes = g, []
-    if(pruning):
-        msg_g, aux_nodes = prune_graph(g)
-
-    train_g = avg_edge_weights(msg_g)
-    #train_g = extreme_edge_weights(msg_g)
-    for n in train_g.nodes():
-        train_g.nodes()[n]["next_value"] = train_g.nodes()[n]["value"]
-
-    d_hist = defaultdict(list)
-    heat = 0
-    for iter in range(iters):
-        if(use_heat):
-            heat = 1 - (iter+1)/(iters)
-
-        for n in train_g.nodes():
-            if(np.random.random() < heat):
-                random_vec = random_dir(train_g.nodes()[n]["value"].shape)
-                next_val = train_g.nodes()[n]["value"] + (eta_p+eta_n)/2 * random_vec
-            else:
-                next_val = update_node_issue_vec(train_g, n, eta_p, eta_n, discount, path_length, batch_size)
-            train_g.nodes()[n]["next_value"] = next_val
-
-        # diagnostic info for change in node values
-        if(save_period and (iter % save_period == 0 or iter == iters-1)):
-            update_mag = sum([np.linalg.norm(train_g.nodes()[n]["next_value"] - train_g.nodes()[n]["value"]) for n in train_g.nodes()])
-            loss = loss_cos_dist(train_g) 
-            d_hist["UPDATE_MAG"].append(update_mag)
-            d_hist["LOSS"].append(loss)
-            for k in hist.keys():
-                hist[k].append(train_g.nodes()[k]["next_value"])
-        if(print_period and (iter % print_period == 0 or iter == iters-1)):
-            print("iteration " + str(iter) + ": update mag:", update_mag, "loss:", loss)
-
-        for n in train_g.nodes():
-            train_g.nodes()[n]["value"] = train_g.nodes()[n]["next_value"]
-
-    for n in train_g.nodes():
-        msg_g.nodes()[n]["value"] = train_g.nodes()[n]["value"]
-    for n in msg_g.nodes():
-        g.nodes()[n]["value"] = msg_g.nodes()[n]["value"]
-    if(pruning):
-        set_auxiliary_values(g, aux_nodes)
-
-    return hist, d_hist
-    

@@ -51,6 +51,11 @@ def unit_vec(vec):
     if(not vec.any()):
         return vec
     return vec / np.linalg.norm(vec)
+    
+def random_dir(shape):
+    direction = np.random.random(size=shape) - 0.5
+    direction = unit_vec(direction)
+    return direction
 
 # unit vector that is average of given vectors
 # input is numpy array of vectors with shape (num_vecs, vec_dim), num_vecs > 0
@@ -98,3 +103,8 @@ def generate_date_range(start, end, step):
     periods = (end_date-start_date).days // step
     date_range = pd.date_range(start, end, periods=periods)
     return [str(d) for d in date_range]
+
+def combine_datasets(files): 
+    dfs = [pd.read_csv(f) for f in files] 
+    combined = pd.concat(dfs, ignore_index=True) 
+    return combined
