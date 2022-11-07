@@ -96,6 +96,9 @@ def average_value(g):
 def node_degrees(g):
     return sorted(list(g.degree()), key=lambda x: x[1], reverse=True)
 
+def get_top_n_nodes(g, n):
+    return [nd[0] for nd in node_degrees(g)[:n]]
+
 def generate_date_range(start, end, step):
     start, end = start.strip(), end.strip()
     start_date = datetime.datetime.strptime(start, "%Y-%m-%d")
