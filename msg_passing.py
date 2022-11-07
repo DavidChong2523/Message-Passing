@@ -209,6 +209,8 @@ def update_node_random_walk(g, n, eta_p, eta_n, discount, path_length, batch_siz
 def pass_messages_on_graph(g, update_node_func, eta_p, eta_n, iters, use_heat, print_period=None, save_period=None, history={}, **kwargs):
     # initialize history
     diagnostic_hist = defaultdict(list)
+    if(save_period):
+        diagnostic_hist["SAVE_PER"] = [save_period]
     for k in history.keys():
         history[k].append(g.nodes()[k]["value"])
         
