@@ -109,16 +109,18 @@ def extreme_edge_weights(g):
     process_g = nx.create_empty_copy(g)
     for u, v in g.edges():
         edge_weights = [e["weight"] for e in g[u][v].values()]
-        max_weight = max(edge_weights)
-        min_weight = max(edge_weights)
-        if(max_weight == min_weight):
-            process_g.add_edge(u, v, weight=max_weight)
-        elif(abs(max_weight) > abs(min_weight)):
-            process_g.add_edge(u, v, weight=max_weight)
-        elif(abs(min_weight) > abs(max_weight)):
-            process_g.add_edge(u, v, weight=min_weight)
-        else:
-            process_g.add_edge(u, v, weight=0) # can disconnect graph
+        pos_weights = [e for e in edge_weights if e > 0]
+        neg_weights = [e for e in edge_weights if e < 0]
+        if(len(pos_weights) == 0 and len(neg_weights) == 0):
+            continue
+        elif(len(pos_weights) == 0):
+            avg_weight = min(neg_weights) 
+        elif(len(neg_weights) == 0):
+            avg_weight = max(pos_weights)
+        else: 
+            avg_weight = np.average(np.array([min(neg_weights), max(pos_weights)]))
+        process_g.add_edge(u, v, weight=avg_weight)
+        
     return process_g
     
 
