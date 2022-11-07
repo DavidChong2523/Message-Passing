@@ -7,6 +7,8 @@ import pickle
 import os 
 import random
 import itertools
+import sklearn.cluster
+import sklearn.metrics
 
 import utils
 
@@ -77,4 +79,38 @@ def compute_network_stats(g, include_diameter=True):
         stats["diameter"] = nx.diameter(g) 
 
     return stats
+
+
+def generate_confusion_matrix(g, nodes):
+    confusion_matrix = np.zeros((len(nodes), len(nodes)))
+    for i, u in enumerate(nodes):
+        for j, v in enumerate(nodes):
+            confusion_matrix[i][j] = utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"])
+    return confusion_matrix
+
+def cluster_nodes(g, nodes, num_clusters, random_state=100):
+    confusion_matrix = generate_confusion_matrix(g, nodes)
+    model = sklearn.cluster.SpectralCoclustering(n_clusters=num_clusters, random_state=random_state) 
+    model.fit(confusion_matrix) 
+    return model.row_labels_
+
+def generate_clustered_confusion_matrix(g, nodes, num_clusters, random_state=100):
+    labels = cluster_nodes(g, nodes, num_clusters, random_state=100)
+    row_inds = np.argsort(labels) 
+    confusion_matrix = generate_confusion_matrix(g, nodes)
+    confusion_matrix = confusion_matrix[row_inds] 
+    confusion_matrix = confusion_matrix[:, row_inds] 
+    out_row = [nodes[i] for i in row_inds]
+    return out_row, confusion_matrix
+
+def evaluate_clusters(g, nodes, num_clusters, random_state=100):
+    labels = cluster_nodes(g, nodes, num_clusters, random_state=100) 
+    node_vals = [g.nodes()[n]["value"] for n in nodes]
+    score = sklearn.metrics.silhouette_score(node_vals, labels, metric='cosine')
+    return score
+
+def evaluate_cluster_range(g, nodes, start, end, random_state=100):
+    scores = [evaluate_clusters(g, nodes, i, random_state=random_state) for i in range(start, end)]
+    return [i for i in range(start, end)], scores
+
 
