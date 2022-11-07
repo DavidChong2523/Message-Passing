@@ -2,11 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 import plotly.express as px 
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 import pandas as pd 
 import sklearn.cluster 
 from collections import defaultdict
 
+import parse_data
 import utils
+import msg_passing
 
 def iter_colors(num_labels):
     def hsv_to_rgb(hsv):
@@ -33,112 +37,131 @@ def iter_colors(num_labels):
     rgb_vals = [hsv_to_rgb((v, 0.75, 1)) for v in vals]
     return rgb_vals
 
+def generate_title(base, suffix):
+    if(suffix):
+        return base + ": " + suffix 
+    return base
+
 def plot_diagnostic(diagnostic_hist):
-    plt.plot([i for i in range(len(diagnostic_hist["UPDATE_MAG"]))], diagnostic_hist["UPDATE_MAG"], label="update mag")
-    plt.title("update magnitude")
-    plt.xlabel("iterations")
-    plt.ylabel("update magnitude")
-    plt.legend()
-    plt.show()
-    plt.plot([i for i in range(len(diagnostic_hist["LOSS"]))], np.array(diagnostic_hist["LOSS"]), label="loss")
-    plt.title("loss")
-    plt.ylabel("loss")
-    plt.xlabel("iterations")
-    plt.legend()
-    plt.show()
+    iters = np.array([i for i in range(len(diagnostic_hist["LOSS"]))])
+    if(diagnostic_hist["SAVE_PER"]):
+        iters *= diagnostic_hist["SAVE_PER"][0]
 
-# if target provided, plot angle between all nodes and target
-def plot_history(history, target=None):
-    disp_hist = copy.deepcopy(history)
-    colors = iter_colors(len(disp_hist.keys()))
-
-    for k in disp_hist.keys():
-        for i in range(len(disp_hist[k])):
-            if(target):
-                disp_hist[k][i] = utils.between_angle(history[k][i], history[target][i])
-            else:
-                disp_hist[k][i] = utils.vec_to_angle(history[k][i])
-
-    for i, k in enumerate(disp_hist.keys()):
-        plt.plot([i for i in range(len(disp_hist[k]))], disp_hist[k], label=k, color=colors[i])
-    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    plt.xlabel("iterations")
-    plt.ylabel("angle with target node")
-    plt.title("node values")
-    plt.rcParams["figure.figsize"] = (10,5)
-    plt.show()
-
-# nodes is a list of strings describing the set of nodes to plot
-def plot_final_values(g, nodes, target=None):
-    colors = iter_colors(len(nodes))
-    for i, n in enumerate(nodes):
-        if(not target):
-            val = utils.vec_to_angle(g.nodes()[n]["value"])
-        else:
-            val = utils.between_angle(g.nodes()[n]["value"], g.nodes()[target]["value"])
-            #print(n, g.nodes()[n]["value"], g.nodes()[target]["value"], val)
-
-        plt.scatter(i, val, label=n, color=colors[i])
-    plt.legend(bbox_to_anchor=(1,1), loc="upper left")
-    if(not target):
-        plt.title("final node values")
-    else:
-        plt.title(f"final angles with reference node '{target}'")
-    plt.ylabel("angle with target node")
-    plt.xlabel("nodes")
-    plt.rcParams["figure.figsize"] = (10,5)
-    plt.show()
-
-
-def cos_dist_histogram(g, title=""):
-    show_title = "histogram of pairwise cos distances"
-    if(title != ""):
-        show_title += ": " + title
-    distances = [utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"]) for u, v in g.edges()]
-    dist_df = pd.DataFrame({"pairwise cosine distances": distances})
-    fig = px.histogram(dist_df, x="pairwise cosine distances", title=show_title)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("Update Magnitude", "Loss"), x_title="Iterations") 
+    fig.append_trace(
+        go.Scatter(
+            x=iters,
+            y=diagnostic_hist["UPDATE_MAG"]
+        ), row=1, col=1
+    )
+    fig.append_trace(
+        go.Scatter(
+            x=iters,
+            y=diagnostic_hist["LOSS"]
+        ), row=1, col=2
+    )
+    fig.update_layout(showlegend=False, title_text="Diagnostic History")
     fig.show()
     return fig
 
-def confusion_matrix(g, k, title=""):
-    nodes = [n[0] for n in utils.node_degrees(g)[:k]]
-    return node_confusion_matrix(g, nodes, title=title)
+# if target provided, plot angle between all nodes and reference
+def plot_history_with_reference(history, reference=None):
+    cos_dists, iters, nodes = [], [], []
+    for node, vals in history.items():
+        for i, v in enumerate(vals):
+            cos_dists.append(utils.cos_dist(v, history[reference][i]))
+            iters.append(i)
+            nodes.append(node) 
 
-def node_confusion_matrix(g, nodes, title=""):
-    confusion_matrix = np.zeros((len(nodes), len(nodes)))
-    
-    for i, u in enumerate(nodes):
-        for j, v in enumerate(nodes):
-            confusion_matrix[i][j] = utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"])
-    
-    nclusters = 2
-    model = sklearn.cluster.SpectralCoclustering(n_clusters=nclusters, random_state=0) 
-    model.fit(confusion_matrix) 
-    row_inds = np.argsort(model.row_labels_)
-    col_inds = np.argsort(model.column_labels_)
-    out_matrix = confusion_matrix[row_inds]
-    out_matrix = out_matrix[:, row_inds]
-    
-    row = [nodes[i] for i in row_inds]
-    col = [nodes[i] for i in col_inds]
-    labels = {
-        "color": "cos dist",
-        
-    }
-    show_title = "confusion matrix"
-    if(title != ""):
-        show_title += ": " + title
-    fig = px.imshow(out_matrix, x=row, y=row, title=show_title, labels=labels)
-    fig.update_layout(yaxis_nticks=len(nodes), xaxis_nticks=len(nodes))
+    df = pd.DataFrame({"Cosine Distance to Reference Node": cos_dists, "Iteration": iters, "Node": nodes})
+    plt_title = "History of Node Values with Reference Node: " + reference
+    fig = px.line(df, x="Iteration", y="Cosine Distance to Reference Node", color="Node", title=plt_title)
     fig.show()
-    return fig 
+    return fig
 
-def plot_3D_node_values(g, nodes):
+# requires 3d node values
+def plot_3D_node_values(g, nodes, title=None):
     vals = [g.nodes()[n]["value"] for n in nodes]
     x = [v[0] for v in vals]
     y = [v[1] for v in vals]
     z = [v[2] for v in vals] 
     df = {"x": x, "y": y, "z": z, "node": nodes}
-    fig = px.scatter_3d(df, x="x", y="y", z="z", color="node", title="Node values")
+
+    plt_title = "Node Values"
+    plt_title = generate_title(plt_title, title)
+    fig = px.scatter_3d(df, x="x", y="y", z="z", color="node", title=plt_title)
     fig.show()
+    return fig
+
+def plot_cos_dist_histogram(g, title=None):
+    distances = [utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"]) for u, v in g.edges()]
+    df = {"Pairwise Cosine Distances": distances}
+
+    plt_title = "Histogram of Pairwise Cosine Distances"
+    plt_title = generate_title(plt_title, title)
+    fig = px.histogram(df, x="Pairwise Cosine Distances", title=plt_title)
+    fig.show()
+    return fig
+
+def plot_confusion_matrix(g, nodes, num_clusters, title=None):
+    row, confusion_matrix = parse_data.generate_clustered_confusion_matrix(g, nodes, num_clusters)
+    labels = {
+        "color": "Cosine Distance",
+    }
+
+    plt_title = "Confusion Matrix"
+    plt_title = generate_title(plt_title, title)
+    fig = px.imshow(confusion_matrix, x=row, y=row, labels=labels, title=plt_title)
+    fig.update_layout(yaxis_nticks=len(nodes), xaxis_nticks=len(nodes))
+    fig.show()
+    return fig 
+
+def plot_cluster_evaluations(g, nodes, start, end, title=None, show=True):
+    num_clusters, scores = parse_data.evaluate_cluster_range(g, nodes, start, end)
+    df = {"Number of Clusters": num_clusters, "Silhouette Score": scores}
+
+    plt_title = "Cluster Evaluations"
+    plt_title = generate_title(plt_title, title)
+    fig = px.line(df, x="Number of Clusters", y="Silhouette Score", title=plt_title)
+    if(show):
+        fig.show()
+    return fig
+
+# random baseline only works with size 3 node vectors
+def plot_top_n_cluster_evaluations(g, num_nodes_list, start, end, title=None, with_random_baseline=False, show=True):
+    if(with_random_baseline):
+        rand_g = g.copy()
+        msg_passing.initialize_node_values(rand_g, size=3)
+
+    all_num_clusters, all_scores, all_top_n_nodes, all_is_random = [], [], [], []
+    for n in num_nodes_list:
+        num_clusters, scores = parse_data.evaluate_cluster_range(g, utils.get_top_n_nodes(g, n), start, end)
+        top_n_nodes = [n for _ in num_clusters] 
+        is_random = [False for _ in num_clusters]
+        if(with_random_baseline): 
+            num_clusters_random, scores_random = parse_data.evaluate_cluster_range(
+                rand_g, utils.get_top_n_nodes(g, n), start, end)
+            top_n_nodes_random = [n for _ in num_clusters]
+            is_random_random = [True for _ in num_clusters] 
+            num_clusters += num_clusters_random 
+            scores += scores_random
+            top_n_nodes += top_n_nodes_random
+            is_random += is_random_random
+        all_num_clusters += num_clusters
+        all_scores += scores
+        all_top_n_nodes += top_n_nodes
+        all_is_random += is_random
+
+    df = pd.DataFrame({
+        "Number of Clusters": all_num_clusters, 
+        "Silhouette Score": all_scores, 
+        "Top N Nodes Clustered": all_top_n_nodes,
+        "Is Random Baseline": all_is_random
+    })
+
+    plt_title = "Cluster Evaluations"
+    plt_title = generate_title(plt_title, title)
+    fig = px.line(df, x="Number of Clusters", y="Silhouette Score", color="Top N Nodes Clustered", line_dash="Is Random Baseline", title=plt_title)
+    if(show):
+        fig.show()
     return fig
