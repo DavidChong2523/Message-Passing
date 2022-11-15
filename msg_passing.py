@@ -11,12 +11,13 @@ import itertools
 import utils
 import parse_data
 
-def load_graph_csv(fname, clean_data=False, source_col="from_node", target_col="raw_answer"):
+def load_graph_df(df, clean_data, source_col, target_col):
     g = nx.MultiGraph()
-    df = pd.read_csv(fname)
     df["publish_date"] = df["publish_date"].fillna("")
+    df["url_host"] = df["url"].apply(parse_data.get_url_host)
     if(clean_data):
         parse_data.clean_df(df)
+    
 
     edge_questions = defaultdict(set)
     for _, row in df.iterrows():
@@ -37,17 +38,21 @@ def load_graph_csv(fname, clean_data=False, source_col="from_node", target_col="
             valence=row["valence"],
             confidence=row["confidence"],
             publish_date=row["publish_date"],
-            #full_text=row["full_text"],
+            full_text=row["full_text"],
             #summary=row["summary"],
             #keywords=row["keywords"],
             #publish_date=row["publish_date"],
             #authors=row["authors"],
-            #url=row["url"],
+            url=row["url"],
             #leaf_label=row["leaf_label"],
             #root_label=row["root_label"]
         )
 
     return g
+
+def load_graph_csv(fname, clean_data=False, source_col="from_node", target_col="raw_answer"):
+    df = pd.read_csv(fname)
+    return load_graph_df(df, clean_data, source_col, target_col)
 
 def load_graph_graphml(fname):
     g = nx.read_graphml(fname)
@@ -169,12 +174,19 @@ def update_node_value(node_val, vals, eta_p, eta_n):
             neg_edges.append(e)
     pos_nodes, pos_edges = np.array(pos_nodes), np.array(pos_edges) / np.sum(pos_edges)
     neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
+
+    # DCHONG TESTING:
+    pos_weight_mag = sum([abs(p) for p in pos_edges])
+    neg_weight_mag = sum([abs(n) for n in neg_edges]) 
+    pos_weight = pos_weight_mag / (pos_weight_mag + neg_weight_mag)
+    neg_weight = neg_weight_mag / (pos_weight_mag + neg_weight_mag)
+
     if(len(pos_edges) > 0):
         pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
-        next_val -= eta_p * utils.vec_grad(node_val, pos_avg)     
+        next_val -= eta_p * pos_weight * utils.vec_grad(node_val, pos_avg)     
     if(len(neg_edges) > 0):
         neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
-        next_val += eta_n * utils.vec_grad(node_val, neg_avg) 
+        next_val += eta_n * neg_weight * utils.vec_grad(node_val, neg_avg) 
     next_val = utils.unit_vec(next_val)
     return next_val    
 
@@ -184,6 +196,7 @@ def update_node_message_passing(g, n, eta_p, eta_n):
     return update_node_value(g.nodes()[n]["value"], edge_vals, eta_p, eta_n)
 
 # update node via message passing with random walks
+# TODO: try degree penalty: sqrt(neighbor_deg/max_deg)
 def update_node_random_walk(g, n, eta_p, eta_n, discount, path_length, batch_size, allow_loops=True):
     # stores tuples of (issue_weight, issue_vector)
     update_nodes = []
