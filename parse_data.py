@@ -9,6 +9,7 @@ import random
 import itertools
 import sklearn.cluster
 import sklearn.metrics
+import urllib
 
 import utils
 
@@ -63,6 +64,8 @@ def clean_df(df, source_col="from_node", target_col="raw_answer"):
     df[target_col].replace("", np.nan, inplace=True) 
     df.dropna(subset=[source_col, target_col], inplace=True)
 
+def get_url_host(url):
+    return urllib.parse.urlparse(url).hostname
 
 # input must be a connected graph
 def compute_network_stats(g, include_diameter=True): 
