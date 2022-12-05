@@ -1,7 +1,5 @@
 venv/*
 venv39/*
-output/*
-input/*
 __pycache__/*
 *.pyc
 images/*
