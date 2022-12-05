@@ -135,29 +135,29 @@ def run_random_weight_baseline(infile, outfile):
     g = load_and_process(infile)
     pg, _ = msg_passing.prune_graph(g)
     msg_passing.randomize_edge_weights(pg, list(set(constants.QUES_VAL.values()))) 
-    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 1)#20000)
+    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000)
 
 def run_random_edge_baseline(infile, outfile):
     g = load_and_process(infile)
     pg, _ = msg_passing.prune_graph(g) 
     pg = msg_passing.randomize_edges(pg, list(set(constants.QUES_VAL.values())))
     msg_passing.initialize_node_values(pg, size=3)
-    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 1)#20000)
+    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000)
 
 def run_random_permutation_baseline(infile, outfile):
     g = load_and_process(infile)
     pg, _ = msg_passing.prune_graph(g)
     pg = msg_passing.permute_edges(pg) 
     msg_passing.initialize_node_values(pg, size=3)
-    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 1)#20000) 
+    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000) 
 
 def run_message_passing_correctly_weighted(infile, outfile):
     g = load_and_process(infile) 
-    run_message_passing(g, outfile, msg_passing.update_node_random_walk_correctly_weighted, 1)#20000) 
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk_correctly_weighted, 20000) 
 
 def run_message_passing_degree_penalty(infile, outfile):
     g = load_and_process(infile)
-    run_message_passing(g, outfile, msg_passing.update_node_random_walk_degree_penalty, 1)#20000) 
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk_degree_penalty, 20000) 
 
 def run_message_passing_degree_penalty_correctly_weighted(infile, outfile):
     g = load_and_process(infile) 
@@ -165,7 +165,7 @@ def run_message_passing_degree_penalty_correctly_weighted(infile, outfile):
 
 def run_message_passing_standard(infile, outfile):
     g = load_and_process(infile)
-    run_message_passing(g, outfile, msg_passing.update_node_random_walk, 1)#20000)
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk, 20000)
 
 def train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_func): 
     for f in infiles: 
@@ -209,13 +209,13 @@ def run_test_benchmarks():
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_random_weight_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
-    #train_on_files(indir, infiles, outdir, out_suffix, run_random_weight_baseline) 
+    train_on_files(indir, infiles, outdir, out_suffix, run_random_weight_baseline) 
 
     outdir = "output/random_edges/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_random_edge_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
-    #train_on_files(indir, infiles, outdir, out_suffix, run_random_edge_baseline) 
+    train_on_files(indir, infiles, outdir, out_suffix, run_random_edge_baseline) 
 
     outdir = "output/random_permutation/"
     if(not os.path.exists(outdir)):
