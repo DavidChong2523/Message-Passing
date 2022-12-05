@@ -28,7 +28,7 @@ def load_graph_df(df, clean_data, source_col, target_col):
         # don't add duplicate questions to the graph
         source, target = row[source_col], row[target_col]
         if((ques in edge_questions[(source, target)]) or (ques in edge_questions[(target, source)])):
-                continue
+            continue
         edge_questions[(source, target)].add(ques)
         edge_questions[(target, source)].add(ques)
         
@@ -39,6 +39,7 @@ def load_graph_df(df, clean_data, source_col, target_col):
             confidence=row["confidence"],
             publish_date=row["publish_date"],
             full_text=row["full_text"],
+            ans_window=row["sub_window"],
             #summary=row["summary"],
             #keywords=row["keywords"],
             #publish_date=row["publish_date"],
@@ -94,6 +95,37 @@ def initialize_node_values(g, size=1):
         vec = utils.sample_spherical(1, ndim=size)
         vec = vec.reshape((size,))
         g.nodes()[n]["value"] = utils.unit_vec(vec)
+
+def randomize_edge_weights(g, weight_list):
+    for u, v, k in g.edges(keys=True):
+        random_weight = random.choice(weight_list)
+        g[u][v][k]["weight"] = random_weight 
+
+def randomize_edges(g, weight_list):
+    empty_g = nx.create_empty_copy(g)
+    for u, v in itertools.combinations(empty_g.nodes(), 2):
+        if(random.random() > 0.5):
+            empty_g.add_edge(u, v, weight=random.choice(weight_list))
+    return empty_g 
+
+def permute_edges(g):
+    #adjacency_matrix = nx.adjacency_matrix(g, weight="weight") 
+    adjacency_matrix = nx.to_numpy_matrix(g, weight="weight")
+    permuted = np.random.permutation(adjacency_matrix) 
+    permuted_g = nx.from_numpy_matrix(permuted, create_using=nx.MultiGraph) 
+    node_labels = {}
+    for i, n in enumerate(g.nodes()):
+        node_labels[i] = n
+    permuted_g = nx.relabel_nodes(permuted_g, node_labels)
+    return permuted_g 
+
+def initialize_node_influence(g, n):
+    for node in g.nodes():
+        g.nodes()[node]["value"] = 0 
+    for neighbor in g.neighbors(n):
+        edge_weights = np.array([e["weight"] for e in g[n][neighbor].values()])
+        avg_weight = np.average(edge_weights)
+        g.nodes()[neighbor]["value"] = avg_weight 
 
 # compute cosine distance loss over graph g
 def loss_cos_dist(g):
@@ -176,19 +208,34 @@ def update_node_value(node_val, vals, eta_p, eta_n):
     neg_nodes, neg_edges = np.array(neg_nodes), np.array(neg_edges) / np.sum(neg_edges)
 
     # DCHONG TESTING:
-    pos_weight_mag = sum([abs(p) for p in pos_edges])
-    neg_weight_mag = sum([abs(n) for n in neg_edges]) 
-    pos_weight = pos_weight_mag / (pos_weight_mag + neg_weight_mag)
-    neg_weight = neg_weight_mag / (pos_weight_mag + neg_weight_mag)
+    #pos_weight_mag = sum([abs(p) for p in pos_edges])
+    #neg_weight_mag = sum([abs(n) for n in neg_edges]) 
+    #pos_weight = pos_weight_mag / (pos_weight_mag + neg_weight_mag)
+    #neg_weight = neg_weight_mag / (pos_weight_mag + neg_weight_mag)
 
     if(len(pos_edges) > 0):
         pos_avg = utils.avg_vec(pos_nodes, weights=pos_edges)
-        next_val -= eta_p * pos_weight * utils.vec_grad(node_val, pos_avg)     
+        next_val -= eta_p * utils.vec_grad(node_val, pos_avg) # * pos_weight 
     if(len(neg_edges) > 0):
         neg_avg = utils.avg_vec(neg_nodes, weights=neg_edges)
-        next_val += eta_n * neg_weight * utils.vec_grad(node_val, neg_avg) 
+        next_val += eta_n * utils.vec_grad(node_val, neg_avg) # * neg_weight 
     next_val = utils.unit_vec(next_val)
     return next_val    
+
+# vals is a list of (weight, message node value)
+def update_node_value_correctly_weighted(node_val, vals, eta_p, eta_n):
+    next_val = np.copy(node_val)
+    weights, nodes = [], []
+    for e, v in vals:
+        weights.append(e) 
+        nodes.append(v)
+        
+    nodes, weights = np.array(nodes), np.array(weights / sum([abs(w) for w in weights]))
+    for w, n in zip(weights, nodes):
+        next_val -= (eta_p + eta_n)/2 * w * utils.vec_grad(node_val, n) 
+    next_val = utils.unit_vec(next_val)
+    return next_val    
+
 
 # update node via message passing with neighbors
 def update_node_message_passing(g, n, eta_p, eta_n):
@@ -217,6 +264,78 @@ def update_node_random_walk(g, n, eta_p, eta_n, discount, path_length, batch_siz
             curr_node = next_node
 
     next_val = update_node_value(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
+    return next_val
+        
+def update_node_random_walk_correctly_weighted(g, n, eta_p, eta_n, discount, path_length, batch_size, allow_loops=True):
+    # stores tuples of (issue_weight, issue_vector)
+    update_nodes = []
+    for _ in range(batch_size):
+        # initialize to 1/discount so the discount only applies on the second step of the path
+        issue_weight = 1/discount
+        curr_node = n 
+        visited_nodes = set()
+        for _ in range(path_length):
+            next_node = random.choice(list(g.neighbors(curr_node)))
+            if((not allow_loops) and (next_node in visited_nodes)):
+                break
+            issue_weight *= discount*g[curr_node][next_node][0]["weight"]
+            issue_vec = g.nodes()[next_node]["value"]
+            update_nodes.append((issue_weight, issue_vec))
+
+            visited_nodes.add(next_node)
+            curr_node = next_node
+
+    next_val = update_node_value_correctly_weighted(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
+    return next_val
+
+def update_node_random_walk_degree_penalty(g, n, eta_p, eta_n, discount, path_length, batch_size, allow_loops=True):
+    max_degree = utils.node_degrees(g)[0][1]
+
+    # stores tuples of (issue_weight, issue_vector)
+    update_nodes = []
+    for _ in range(batch_size):
+        # initialize to 1/discount so the discount only applies on the second step of the path
+        issue_weight = 1/discount
+        curr_node = n 
+        visited_nodes = set()
+        for _ in range(path_length):
+            next_node = random.choice(list(g.neighbors(curr_node)))
+            if((not allow_loops) and (next_node in visited_nodes)):
+                break
+            degree_weight = np.sqrt(g.degree(next_node) / max_degree)
+            issue_weight *= discount*degree_weight*g[curr_node][next_node][0]["weight"]
+            issue_vec = g.nodes()[next_node]["value"]
+            update_nodes.append((issue_weight, issue_vec))
+
+            visited_nodes.add(next_node)
+            curr_node = next_node
+
+    next_val = update_node_value(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
+    return next_val
+
+def update_node_random_walk_degree_penalty_correctly_weighted_update(g, n, eta_p, eta_n, discount, path_length, batch_size, allow_loops=True):
+    max_degree = utils.node_degrees(g)[0][1]
+
+    # stores tuples of (issue_weight, issue_vector)
+    update_nodes = []
+    for _ in range(batch_size):
+        # initialize to 1/discount so the discount only applies on the second step of the path
+        issue_weight = 1/discount
+        curr_node = n 
+        visited_nodes = set()
+        for _ in range(path_length):
+            next_node = random.choice(list(g.neighbors(curr_node)))
+            if((not allow_loops) and (next_node in visited_nodes)):
+                break
+            degree_weight = np.sqrt(g.degree(next_node) / max_degree)
+            issue_weight *= discount*degree_weight*g[curr_node][next_node][0]["weight"]
+            issue_vec = g.nodes()[next_node]["value"]
+            update_nodes.append((issue_weight, issue_vec))
+
+            visited_nodes.add(next_node)
+            curr_node = next_node
+
+    next_val = update_node_value_correctly_weighted(g.nodes()[n]["value"], update_nodes, eta_p, eta_n)
     return next_val
 
 def pass_messages_on_graph(g, update_node_func, eta_p, eta_n, iters, use_heat, print_period=None, save_period=None, history={}, **kwargs):
@@ -278,7 +397,7 @@ def pass_messages(g, eta_p, eta_n, iters, use_heat, pruning=True, print_period=N
 
     return history, diagnostic_hist
 
-def pass_messages_with_random_walks(g, eta_p, eta_n, iters, use_heat, pruning=True, print_period=None, save_period=None, history={}, discount=1, path_length=10, batch_size=10):
+def pass_messages_with_random_walks(g, eta_p, eta_n, iters, use_heat, pruning=True, print_period=None, save_period=None, history={}, discount=1, path_length=10, batch_size=10, update_func=update_node_random_walk):
     msg_g, aux_nodes = g, []
     if(pruning):
         msg_g, aux_nodes = prune_graph(g)
@@ -287,7 +406,7 @@ def pass_messages_with_random_walks(g, eta_p, eta_n, iters, use_heat, pruning=Tr
     #msg_g = extreme_edge_weights(msg_g)
 
     history, diagnostic_hist = pass_messages_on_graph(
-        msg_g, update_node_random_walk, eta_p, eta_n, iters, use_heat, 
+        msg_g, update_func, eta_p, eta_n, iters, use_heat, 
         print_period=print_period, save_period=save_period, history=history, 
         discount=discount, path_length=path_length, batch_size=batch_size
     )
