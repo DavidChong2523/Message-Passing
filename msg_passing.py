@@ -102,11 +102,16 @@ def randomize_edge_weights(g, weight_list):
         g[u][v][k]["weight"] = random_weight 
 
 def randomize_edges(g, weight_list):
-    empty_g = nx.create_empty_copy(g)
-    for u, v in itertools.combinations(empty_g.nodes(), 2):
-        if(random.random() > 0.5):
-            empty_g.add_edge(u, v, weight=random.choice(weight_list))
-    return empty_g 
+    avg_g = avg_edge_weights(g) 
+    random_g = nx.gnm_random_graph(len(avg_g.nodes()), len(avg_g.edges()), seed=1373849)
+    random_g = utils.largest_connected_component(random_g)
+    random_g = nx.MultiGraph(random_g)
+    randomize_edge_weights(random_g, weight_list)
+    node_labels = {}
+    for i, n in enumerate(g.nodes()):
+        node_labels[i] = n
+    random_g = nx.relabel_nodes(random_g, node_labels)
+    return random_g
 
 def permute_edges(g):
     #adjacency_matrix = nx.adjacency_matrix(g, weight="weight") 

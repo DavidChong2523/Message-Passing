@@ -133,22 +133,22 @@ def run_message_passing(g, outfile, node_update_func, iters, save_history=True):
 
 def run_random_weight_baseline(infile, outfile):
     g = load_and_process(infile)
-    pg, _ = msg_passing.prune_graph(g)
-    msg_passing.randomize_edge_weights(pg, list(set(constants.QUES_VAL.values()))) 
-    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000)
+    msg_passing.randomize_edge_weights(g, list(set(constants.QUES_VAL.values()))) 
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk, 20000)
 
 def run_random_edge_baseline(infile, outfile):
-    g = load_and_process(infile)
-    pg, _ = msg_passing.prune_graph(g) 
-    pg = msg_passing.randomize_edges(pg, list(set(constants.QUES_VAL.values())))
-    msg_passing.initialize_node_values(pg, size=3)
-    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000)
+    g = msg_passing.load_graph_csv(infile, clean_data=True)
+    random_g = msg_passing.randomize_edges(g, list(set(constants.QUES_VAL.values())))
+    random_g = utils.largest_connected_component(g)
+    msg_passing.initialize_node_values(random_g, size=3)
+    run_message_passing(random_g, outfile, msg_passing.update_node_random_walk, 20000)
 
 def run_random_permutation_baseline(infile, outfile):
-    g = load_and_process(infile)
+    g = msg_passing.load_graph_csv(infile, clean_data=True) 
+    g = msg_passing.permute_edges(g) 
+    g = utils.largest_connected_component(g)
+    msg_passing.initialize_node_values(g, size=3)
     pg, _ = msg_passing.prune_graph(g)
-    pg = msg_passing.permute_edges(pg) 
-    msg_passing.initialize_node_values(pg, size=3)
     run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000) 
 
 def run_message_passing_correctly_weighted(infile, outfile):
@@ -205,12 +205,13 @@ def run_test_benchmarks():
         "ukraine_war_network.csv",
         "vaccine_hesitancy_network.csv",
     ]
+    
     outdir = "output/random_weights/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_random_weight_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
     train_on_files(indir, infiles, outdir, out_suffix, run_random_weight_baseline) 
-
+    
     outdir = "output/random_edges/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
@@ -222,7 +223,7 @@ def run_test_benchmarks():
         os.makedirs(outdir) 
     out_suffix = "_random_permutation_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10" 
     train_on_files(indir, infiles, outdir, out_suffix, run_random_permutation_baseline) 
-
+    
     outdir = "output/correctly_weighted/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
