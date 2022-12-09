@@ -5,6 +5,8 @@ import os
 import msg_passing
 import utils
 import constants
+from multiprocessing import Process
+
 
 HIST_GR = [
     "nra",
@@ -161,7 +163,7 @@ def run_message_passing_degree_penalty(infile, outfile):
 
 def run_message_passing_degree_penalty_correctly_weighted(infile, outfile):
     g = load_and_process(infile) 
-    run_message_passing(g, outfile, msg_passing.update_node_random_walk_degree_penalty_correctly_weighted_update, 1)#20000) 
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk_degree_penalty_correctly_weighted_update, 20000) 
 
 def run_message_passing_standard(infile, outfile):
     g = load_and_process(infile)
@@ -195,6 +197,8 @@ def run_incremental():
     train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_standard)
 
 def run_test_benchmarks():
+    processes = []
+    
     indir = "input/With_Windows/"
     infiles = [
         "global_warming_network.csv",
@@ -210,43 +214,57 @@ def run_test_benchmarks():
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_random_weight_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
-    train_on_files(indir, infiles, outdir, out_suffix, run_random_weight_baseline) 
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_random_weight_baseline)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_random_weight_baseline) 
     
     outdir = "output/random_edges/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_random_edge_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
-    train_on_files(indir, infiles, outdir, out_suffix, run_random_edge_baseline) 
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_random_edge_baseline)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_random_edge_baseline) 
 
     outdir = "output/random_permutation/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir) 
     out_suffix = "_random_permutation_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10" 
-    train_on_files(indir, infiles, outdir, out_suffix, run_random_permutation_baseline) 
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_random_permutation_baseline)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_random_permutation_baseline) 
     
     outdir = "output/correctly_weighted/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_correctly_weighted_lr_10-3_20K_dc_095_pl_10_bs_10" 
-    train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_correctly_weighted) 
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_message_passing_correctly_weighted)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_correctly_weighted) 
 
     outdir = "output/degree_penalty/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_degree_penalty_lr_10-3_20K_dc_095_pl_10_bs_10" 
-    train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_degree_penalty) 
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_message_passing_degree_penalty)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_degree_penalty) 
 
     outdir = "output/degree_penalty_correctly_weighted/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_degree_penalty_correctly_weighted_lr_10-3_20K_dc_095_pl_10_bs_10" 
-    train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_degree_penalty_correctly_weighted) 
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_message_passing_degree_penalty_correctly_weighted)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_degree_penalty_correctly_weighted) 
 
     outdir = "output/with_windows/" 
     if(not os.path.exists(outdir)):
         os.makedirs(outdir)
     out_suffix = "_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10" 
-    train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_standard)
+    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_message_passing_standard)))
+    # train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_standard)
+    
+    for process in processes:
+        process.start()
+    
+    for process in processes:
+        process.join()
+    print('Done', flush=True)
     
 
 if __name__ == "__main__":
