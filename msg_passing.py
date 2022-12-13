@@ -117,6 +117,10 @@ def permute_edges(g):
     #adjacency_matrix = nx.adjacency_matrix(g, weight="weight") 
     adjacency_matrix = nx.to_numpy_matrix(g, weight="weight")
     permuted = np.random.permutation(adjacency_matrix) 
+    for i in range(permuted.shape[0]):
+        for j in range(permuted.shape[1]):
+            if(i < j):
+                permuted[i][j] = permuted[j][i]
     permuted_g = nx.from_numpy_matrix(permuted, create_using=nx.MultiGraph) 
     node_labels = {}
     for i, n in enumerate(g.nodes()):

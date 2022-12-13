@@ -99,22 +99,6 @@ def generate_confusion_matrix(g, nodes):
             confusion_matrix[i][j] = utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"])
     return confusion_matrix
 
-def generate_confusion_matrix_weight(g, nodes):
-    avg_g = msg_passing.extreme_edge_weights(g)
-    confusion_matrix = np.zeros((len(nodes), len(nodes)))
-    for i, u in enumerate(nodes):
-        for j, v in enumerate(nodes):
-            try: 
-                weight = avg_g[u][v][0]["weight"]
-                if(weight < 0):
-                    dist = 10
-                else:
-                    dist = 1 - weight
-            except:
-                dist = 2
-            confusion_matrix[i][j] = dist
-    return confusion_matrix
-
 def cluster_nodes_coclustering(g, nodes, num_clusters, random_state=100):
     confusion_matrix = generate_confusion_matrix(g, nodes)
     model = sklearn.cluster.SpectralCoclustering(n_clusters=num_clusters, random_state=random_state) 
@@ -158,11 +142,26 @@ def generate_clustered_confusion_matrix(g, nodes, num_clusters, random_state=100
     out_row = [nodes[i] for i in row_inds]
     return out_row, confusion_matrix
 
+def evaluate_clustering(g, nodes, labels):
+    node_vals = [g.nodes()[n]["value"] for n in nodes]
+    
+    # ignore -1 clusters
+    evaluate_labels, evaluate_node_vals = [], []
+    for i in range(len(labels)):
+        if(labels[i] >= 0):
+            evaluate_labels.append(labels[i])
+            evaluate_node_vals.append(node_vals[i])
+
+    if(len(evaluate_labels) == 0):
+        raise Exception("List of clusters to evaluate is empty")
+    if(len(evaluate_labels) == 1):
+        raise Exception("Single cluster provided")
+    score = sklearn.metrics.silhouette_score(evaluate_node_vals, evaluate_labels, metric='cosine') 
+    return score
+
 def evaluate_clusters(g, nodes, num_clusters, random_state=100):
     labels = cluster_nodes_coclustering(g, nodes, num_clusters, random_state=100) 
-    node_vals = [g.nodes()[n]["value"] for n in nodes]
-    score = sklearn.metrics.silhouette_score(node_vals, labels, metric='cosine')
-    return score
+    return evaluate_clustering(g, nodes, labels)
 
 def evaluate_cluster_range(g, nodes, start, end, random_state=100):
     scores = [evaluate_clusters(g, nodes, i, random_state=random_state) for i in range(start, end)]

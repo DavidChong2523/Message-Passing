@@ -161,7 +161,7 @@ def run_message_passing_degree_penalty(infile, outfile):
 
 def run_message_passing_degree_penalty_correctly_weighted(infile, outfile):
     g = load_and_process(infile) 
-    run_message_passing(g, outfile, msg_passing.update_node_random_walk_degree_penalty_correctly_weighted_update, 1)#20000) 
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk_degree_penalty_correctly_weighted_update, 20000) 
 
 def run_message_passing_standard(infile, outfile):
     g = load_and_process(infile)

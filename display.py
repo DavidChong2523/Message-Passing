@@ -28,6 +28,31 @@ COLORS = [
     '#17becf'   # blue-teal
 ]
 
+""" 
+https://colorkit.co/palette/1abc9c-16a085-2ecc71-27ae60-3498db-2980b9-9b59b6-8e44ad-34495e-2c3e50-f1c40f-f39c12-e67e22-d35400-e74c3c-c0392b-ecf0f1-bdc3c7-95a5a6-7f8c8d/ 
+"""
+COLORS2 = [
+    "#e74c3c", # red
+    "#ffa0c5", # pink
+    "#f39c12", # orange
+    "#f1c40f", # yellow
+    "#2ecc71", # light green
+    "#3498db", # blue
+    "#9b59b6", # purple
+    "#d35400", # dark red
+    
+]
+
+COLORS3 = [
+    "#9b5fe0",
+    "#16a4d8",
+    "#60dbe8",
+    "#8bd346",
+    "#efdf48",
+    "#f9a52c",
+    "#d64e12"
+]
+
 def iter_colors(num_labels):
     def hsv_to_rgb(hsv):
         h, s, v = hsv
@@ -84,12 +109,53 @@ def plot_diagnostic(diagnostic_hist, title=None, show=True):
         fig.show()
     return fig
 
+# max number of issues supported is len(COLORS.keys())
+def plot_diagnostic_multiple_issues(hist_files, graph_files, issue_names, show=True):
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("Update Magnitude", "Loss"), x_title="Iterations") 
+    for i in range(len(hist_files)):
+        dh = msg_passing.load_history(hist_files[i])[1]
+        g = msg_passing.load_graph_graphml(graph_files[i])
+        pg, _ = msg_passing.prune_graph(g)
+
+        iters = np.array([i for i in range(len(dh["LOSS"]))])
+        if(dh["SAVE_PER"]):
+            iters *= dh["SAVE_PER"][0]
+
+        fig.append_trace(
+            go.Scatter(
+                x=iters,
+                y=np.array(dh["UPDATE_MAG"]) / len(pg.nodes()),
+                line=dict(color=COLORS2[i]),
+                name=issue_names[i]
+            ), row=1, col=1
+        )
+        fig.append_trace(
+            go.Scatter(
+                x=iters,
+                y=np.array(dh["LOSS"]) / len(pg.nodes()),
+                line=dict(color=COLORS2[i]),
+                name=issue_names[i],
+                showlegend=False
+            ), row=1, col=2
+        )
+
+    #plt_title = "Diagnostic History" 
+    #plt_title = generate_title(plt_title, title)
+    #fig.update_layout(showlegend=True, title_text=plt_title)
+    fig.update_yaxes(exponentformat="E")
+    fig.update_layout(margin_t=40, margin_b=70, margin_l=60)
+    if(show):
+        fig.show()
+    return fig
+
 # TODO: left align subplot titles - https://community.plotly.com/t/subplot-title-alignment/33210/2
-def plot_diagnostic_grid(hist_files, titles, plt_title_text, plt_rows, plt_cols, show=True):
+def plot_diagnostic_grid(hist_files, graph_files, titles, plt_title_text, plt_rows, plt_cols, show=True):
     plt_titles = [titles[i // 2] if i % 2 == 0 else "" for i in range(len(titles)*2)]
     fig = make_subplots(rows=plt_rows, cols=plt_cols*2, subplot_titles=plt_titles, x_title="Iterations")
     for i, f in enumerate(hist_files):
         dh = msg_passing.load_history(f)[1]
+        g = msg_passing.load_graph_graphml(graph_files[i])
+        pg, _ = msg_passing.prune_graph(g)
         dh_row = (i // plt_cols) + 1
         dh_col = (i % plt_cols) + 1
         update_mag_col = dh_col*2-1
@@ -103,7 +169,7 @@ def plot_diagnostic_grid(hist_files, titles, plt_title_text, plt_rows, plt_cols,
         fig.append_trace(
             go.Scatter(
                 x=iters,
-                y=dh["UPDATE_MAG"],
+                y=np.array(dh["UPDATE_MAG"]) / len(pg.nodes()),
                 line=dict(color=COLORS[0]),
                 name="Update Magnitude",
                 showlegend=update_mag_showlegend
@@ -112,7 +178,7 @@ def plot_diagnostic_grid(hist_files, titles, plt_title_text, plt_rows, plt_cols,
         fig.append_trace(
             go.Scatter(
                 x=iters,
-                y=dh["LOSS"],
+                y=np.array(dh["LOSS"]) / len(pg.nodes()),
                 line=dict(color=COLORS[3]),
                 name="Loss",
                 showlegend=loss_showlegend
