@@ -8,6 +8,7 @@ import hdbscan
 
 import msg_passing
 import utils
+import parse_data
 
 def reweight_edges_louvain(g, nodes):
     avg_g = msg_passing.avg_edge_weights(g)
@@ -26,7 +27,7 @@ def reweight_edges_hdbscan(g, nodes):
         if(u in avg_g.neighbors(v)):
             curr_weight = avg_g[u][v][0]["weight"] 
             if(curr_weight < 0):
-                avg_g[u][v][0]["weight"] = 100
+                avg_g[u][v][0]["weight"] = 3
             else:
                 avg_g[u][v][0]["weight"] = 2 - curr_weight
         else:
@@ -58,8 +59,9 @@ def cluster_hdbscan(g, nodes):
 
 node_ind_to_name = {}
 dist_g = None
-def reweight_distance(node1, node2):
-    node1, node2 = node_ind_to_name[node1[0]], node_ind_to_name[node2[0]]
+def reweight_distance(node1, node2, input_names=False):
+    if(not input_names):
+        node1, node2 = node_ind_to_name[node1[0]], node_ind_to_name[node2[0]]
     global dist_g 
     if(node1 == node2):
         return 0
@@ -118,3 +120,49 @@ def evaluate_multiple_issues_hdbscan(network_dir, network_names, network_suffix,
 
         num_clusters = len(set(node_labels))
         print(f"HDBSCAN clustering results for {name} - num clusters: {num_clusters}, score: {score}")
+
+def generate_distance_matrix(g, nodes):
+    set_dist_g(g)
+    distance_matrix = np.zeros((len(nodes), len(nodes)))
+    for i, u in enumerate(nodes):
+        for j, v in enumerate(nodes):
+            distance_matrix[i][j] = reweight_distance(u, v, input_names=True)
+    return distance_matrix
+
+def generate_clustered_confusion_matrix(g, nodes, cluster_func, top_n_nodes=None, drop_noise=False):
+    labels = cluster_func(g, nodes)
+
+    processed_labels, processed_nodes = [], []
+    if(drop_noise):
+        for i in range(len(nodes)):
+            if(labels[i] >= 0):
+                processed_labels.append(labels[i])
+                processed_nodes.append(nodes[i])
+    labels = processed_labels
+    nodes = processed_nodes
+
+    nodes_to_display = []
+    labels_to_display = []
+    if(not top_n_nodes):
+        top_n_nodes = len(g.nodes())
+    for n in utils.get_top_n_nodes(g, len(g.nodes())):
+        for i in range(len(nodes)):
+            if(nodes[i] == n):
+                nodes_to_display.append(n)
+                labels_to_display.append(labels[i])
+        if(len(nodes_to_display) == top_n_nodes):
+            break
+
+    row_inds = np.argsort(labels_to_display) 
+
+    confusion_matrix = generate_distance_matrix(g, nodes_to_display)
+    confusion_matrix = confusion_matrix[row_inds] 
+    confusion_matrix = confusion_matrix[:, row_inds] 
+    display_row = [nodes_to_display[i] for i in row_inds]
+    return display_row, confusion_matrix
+
+def generate_clustered_confusion_matrix_hdbscan(g, nodes, top_n_nodes=None, drop_noise=False):
+    return generate_clustered_confusion_matrix(g, nodes, cluster_hdbscan, top_n_nodes, drop_noise=drop_noise)
+
+def generate_clustered_confusion_matrix_louvain(g, nodes, top_n_nodes=None, drop_noise=False):
+    return generate_clustered_confusion_matrix(g, nodes, cluster_louvain, top_n_nodes, drop_noise=drop_noise)

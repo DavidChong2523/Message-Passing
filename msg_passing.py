@@ -239,9 +239,13 @@ def update_node_value_correctly_weighted(node_val, vals, eta_p, eta_n):
         weights.append(e) 
         nodes.append(v)
         
-    nodes, weights = np.array(nodes), np.array(weights / sum([abs(w) for w in weights]))
+    nodes, weights = np.array(nodes), np.array(weights) / sum([abs(w) for w in weights])
+    avg_node = utils.avg_vec(nodes, weights=weights)
+    next_val -= (eta_p + eta_n)/2 * utils.vec_grad(node_val, avg_node)
+    """
     for w, n in zip(weights, nodes):
         next_val -= (eta_p + eta_n)/2 * w * utils.vec_grad(node_val, n) 
+    """ 
     next_val = utils.unit_vec(next_val)
     return next_val    
 

@@ -150,8 +150,7 @@ def run_random_permutation_baseline(infile, outfile):
     g = msg_passing.permute_edges(g) 
     g = utils.largest_connected_component(g)
     msg_passing.initialize_node_values(g, size=3)
-    pg, _ = msg_passing.prune_graph(g)
-    run_message_passing(pg, outfile, msg_passing.update_node_random_walk, 20000) 
+    run_message_passing(g, outfile, msg_passing.update_node_random_walk, 20000) 
 
 def run_message_passing_correctly_weighted(infile, outfile):
     g = load_and_process(infile) 
@@ -210,20 +209,6 @@ def run_test_benchmarks():
         "vaccine_hesitancy_network.csv",
     ]
     
-    outdir = "output/random_weights/"
-    if(not os.path.exists(outdir)):
-        os.makedirs(outdir)
-    out_suffix = "_random_weight_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
-    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_random_weight_baseline)))
-    # train_on_files(indir, infiles, outdir, out_suffix, run_random_weight_baseline) 
-    
-    outdir = "output/random_edges/"
-    if(not os.path.exists(outdir)):
-        os.makedirs(outdir)
-    out_suffix = "_random_edge_baseline_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10"
-    processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_random_edge_baseline)))
-    # train_on_files(indir, infiles, outdir, out_suffix, run_random_edge_baseline) 
-
     outdir = "output/random_permutation/"
     if(not os.path.exists(outdir)):
         os.makedirs(outdir) 
@@ -258,7 +243,7 @@ def run_test_benchmarks():
     out_suffix = "_random_walks_lr_10-3_20K_dc_095_pl_10_bs_10" 
     processes.append(Process(target=train_on_files, args=(indir, infiles, outdir, out_suffix, run_message_passing_standard)))
     # train_on_files(indir, infiles, outdir, out_suffix, run_message_passing_standard)
-    
+   
     for process in processes:
         process.start()
     

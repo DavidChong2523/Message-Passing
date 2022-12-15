@@ -109,38 +109,41 @@ def cluster_nodes_coclustering(g, nodes, num_clusters, random_state=100):
 def cluster_nodes_hdbscan(g, nodes):
     # cosine distance
     distance_matrix = generate_confusion_matrix(g, nodes)
-    #distance_matrix = generate_confusion_matrix_weight(g, nodes)
     model = hdbscan.HDBSCAN(metric='precomputed')
     model.fit(distance_matrix) 
     return model.labels_
 
-def generate_clustered_confusion_matrix(g, nodes, num_clusters, random_state=100):
-    labels = cluster_nodes_coclustering(g, nodes, num_clusters, random_state=100)
+def generate_clustered_confusion_matrix(g, nodes, top_n_nodes=None, drop_noise=False):
     labels = cluster_nodes_hdbscan(g, nodes)
-    row_inds = np.argsort(labels) 
-    # TEMP TESTING
-    sorted_nodes = [nodes[i] for i in row_inds]
-    start_zero = 0
-    for i in range(len(row_inds)):
-        if(labels[i] < 0):
-            start_zero += 1
-    # don't throw away -1s
-    #nodes = sorted_nodes[start_zero:]
-    nodes = sorted_nodes
-    #print(sorted(labels), sorted_nodes, nodes)
-    print(np.unique(labels))
-    print(sorted_nodes[:start_zero])
 
-    degs = sorted(list((n, g.degree(n)) for n in nodes), key=lambda x: x[1], reverse=True)
-    top_20_degs = [n[0] for n in degs[:50]]
-    nodes = [n for n in nodes if n in top_20_degs]
-    row_inds = [i for i in range(len(nodes))]
+    processed_labels, processed_nodes = [], []
+    if(drop_noise):
+        for i in range(len(nodes)):
+            if(labels[i] >= 0):
+                processed_labels.append(labels[i])
+                processed_nodes.append(nodes[i])
+    labels = processed_labels
+    nodes = processed_nodes
 
-    confusion_matrix = generate_confusion_matrix(g, nodes)
+    nodes_to_display = []
+    labels_to_display = []
+    if(not top_n_nodes):
+        top_n_nodes = len(g.nodes())
+    for n in utils.get_top_n_nodes(g, len(g.nodes())):
+        for i in range(len(nodes)):
+            if(nodes[i] == n):
+                nodes_to_display.append(n)
+                labels_to_display.append(labels[i])
+        if(len(nodes_to_display) == top_n_nodes):
+            break
+
+    row_inds = np.argsort(labels_to_display) 
+
+    confusion_matrix = generate_confusion_matrix(g, nodes_to_display)
     confusion_matrix = confusion_matrix[row_inds] 
     confusion_matrix = confusion_matrix[:, row_inds] 
-    out_row = [nodes[i] for i in row_inds]
-    return out_row, confusion_matrix
+    display_row = [nodes_to_display[i] for i in row_inds]
+    return display_row, confusion_matrix
 
 def evaluate_clustering(g, nodes, labels):
     node_vals = [g.nodes()[n]["value"] for n in nodes]

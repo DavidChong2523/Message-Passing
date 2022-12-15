@@ -10,6 +10,7 @@ from collections import defaultdict
 
 import parse_data
 import utils
+import baselines
 import msg_passing
 
 """
@@ -233,7 +234,7 @@ def plot_cos_dist_histogram(g, title=None):
     return fig
 
 
-def plot_cos_dist_histogram_grid(graph_files, titles, plt_title_text, plt_rows, plt_cols, random_baseline=False, show=True):
+def plot_cos_dist_histogram_grid(graph_files, titles, plt_title_text, plt_rows, plt_cols, random_baseline=False, log_scale=False, show=True):
     fig = make_subplots(rows=plt_rows, cols=plt_cols, subplot_titles=titles, y_title="Count (log scale)", x_title="Pairwise Cosine Distances")
     for i, f in enumerate(graph_files):
         g = msg_passing.load_graph_graphml(f)
@@ -244,7 +245,12 @@ def plot_cos_dist_histogram_grid(graph_files, titles, plt_title_text, plt_rows, 
         g_row = (i // plt_cols) + 1
         g_col = (i % plt_cols) + 1
         distances = [utils.cos_dist(g.nodes()[u]["value"], g.nodes()[v]["value"]) for u, v in g.edges()]
-
+        # ignore nan
+        distances = [d for d in distances if not np.isnan(d)]
+        if(len(distances) == 0):
+            print("Error: zero length distances") 
+            print(g.nodes()["biden"]["value"])
+            continue
         # number of bins: https://medium.datadriveninvestor.com/how-to-decide-on-the-number-of-bins-of-a-histogram-3c36dc5b1cd8 
         num_bins = int(1 + np.ceil(np.log2(len(distances))))
         max_dist = 2
@@ -265,7 +271,8 @@ def plot_cos_dist_histogram_grid(graph_files, titles, plt_title_text, plt_rows, 
                 marker_color="blue"
             ), row=g_row, col=g_col
         )
-        fig.update_yaxes(type="log")
+        if(log_scale):
+            fig.update_yaxes(type="log")
         fig.update_xaxes(range=[0, 2])
     
     fig.update_layout(showlegend=False, title_text=plt_title_text)
@@ -291,22 +298,24 @@ def plot_confusion_matrix(g, nodes, num_clusters, title=None, show=True):
         fig.show()
     return fig 
 
-def plot_confusion_matrix_with_random_baseline(g, nodes, num_clusters, title=None, show=True):
+def plot_confusion_matrix_with_random_baseline(g, nodes, top_n_nodes, drop_noise=True, title=None, random_baseline=False, show=True):
     def truncate_row_names(row, max_len):
         return [r if len(r) < max_len else r[:max_len-3] + "..." for r in row]
 
     plt_title = generate_title("Confusion Matrix", title)
     fig = make_subplots(rows=1, cols=2, subplot_titles=("Learned Representations", "Random Baseline"))
-    row, confusion_matrix = parse_data.generate_clustered_confusion_matrix(g, nodes, num_clusters)
+    row, confusion_matrix = parse_data.generate_clustered_confusion_matrix(g, nodes, top_n_nodes, drop_noise=drop_noise)
+    #row, confusion_matrix = baselines.generate_clustered_confusion_matrix_hdbscan(g, nodes, top_n_nodes, drop_noise=drop_noise)
     row = truncate_row_names(row, 30)
 
     rand_g = g.copy()
     msg_passing.initialize_node_values(rand_g, size=g.nodes()[list(g)[0]]["value"].shape[0])
-    row_baseline, confusion_matrix_baseline = parse_data.generate_clustered_confusion_matrix(rand_g, nodes, num_clusters)
+    row_baseline, confusion_matrix_baseline = parse_data.generate_clustered_confusion_matrix(rand_g, nodes, top_n_nodes, drop_noise=drop_noise)
     row_baseline = truncate_row_names(row_baseline, 15)
 
     fig.add_trace(go.Heatmap(x=row, y=row[::-1], z=confusion_matrix[::-1, :], colorbar=dict(title='Cosine Distance')), row=1, col=1)
-    fig.add_trace(go.Heatmap(x=row_baseline, y=row_baseline[::-1], z=confusion_matrix_baseline[::-1, :], showscale=False), row=1, col=2)
+    if(random_baseline):
+        fig.add_trace(go.Heatmap(x=row_baseline, y=row_baseline[::-1], z=confusion_matrix_baseline[::-1, :], showscale=False), row=1, col=2)
     fig.update_layout(yaxis_nticks=len(nodes), xaxis_nticks=len(nodes), title_text=plt_title)
     if(show):
         fig.show() 
